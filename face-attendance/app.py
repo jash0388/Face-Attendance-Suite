@@ -237,4 +237,6 @@ def api_mark_attendance():
 if __name__ == "__main__":
     init_db()
     port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port, debug=True)
+    # Disable the auto-reloader so file saves don't trigger transient 502s
+    # behind the dev proxy. Keep debug=True for nicer error pages.
+    app.run(host="0.0.0.0", port=port, debug=True, use_reloader=False)

@@ -118,14 +118,27 @@
       return parts.join('\n') || 'Unknown error.';
     }
 
-    async function runStep(label, fn) {
+    function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+    async function runStep(label, fn, { retries = 4, retryDelayMs = 800 } = {}) {
       setStatus(label + '…');
-      try {
-        return await fn();
-      } catch (e) {
-        const msg = `Step failed: "${label}"\n\n${describeError(e)}`;
-        throw new Error(msg);
+      let lastErr;
+      for (let attempt = 1; attempt <= retries; attempt++) {
+        try {
+          return await fn();
+        } catch (e) {
+          lastErr = e;
+          const transient = /50\d|network|fetch|load/i.test(String(e && e.message));
+          if (attempt < retries && transient) {
+            setStatus(`${label} (retry ${attempt}/${retries - 1})…`);
+            await sleep(retryDelayMs * attempt);
+            continue;
+          }
+          break;
+        }
       }
+      const msg = `Step failed: "${label}"\n\n${describeError(lastErr)}`;
+      throw new Error(msg);
     }
 
     async function loadModelsAndStudents() {
