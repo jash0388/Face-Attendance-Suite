@@ -1,0 +1,212 @@
+{% extends "base.html" %}
+{% block title %}Test Camera - Face Attendance{% endblock %}
+
+{% block content %}
+  <h1>Test Camera</h1>
+  <p class="subtitle">
+    Live face recognition using your browser's webcam. Green = recognised student, Red = unknown.
+  </p>
+
+  <div class="card">
+    <div id="status" style="margin-bottom: 0.75rem; color: var(--muted);">
+      Initialising&hellip;
+    </div>
+
+    <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
+      <button id="start-btn" class="btn btn-primary" disabled>Start Camera</button>
+      <button id="stop-btn" class="btn btn-danger" style="display:none">Stop Camera</button>
+    </div>
+
+    <div id="video-wrap"
+         style="position: relative; display: inline-block; background: #111;
+                border-radius: 8px; overflow: hidden; max-width: 100%;">
+      <video id="video" autoplay muted playsinline
+             style="display: block; max-width: 100%; height: auto;"></video>
+      <canvas id="overlay"
+              style="position: absolute; top: 0; left: 0; pointer-events: none;"></canvas>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2 style="margin-top:0; font-size: 1.1rem;">Recognised this session</h2>
+    <ul id="recognized-list" style="margin: 0; padding-left: 1.25rem;">
+      <li id="recognized-empty" style="list-style:none; color: var(--muted); margin-left:-1.25rem;">
+        Nobody yet&hellip;
+      </li>
+    </ul>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+  <script>
+    const MODEL_URL = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@master/weights/';
+    const MATCH_THRESHOLD = 0.5;
+    const STUDENTS_URL = "{{ url_for('api_students') }}";
+    const MARK_URL = "{{ url_for('api_mark_attendance') }}";
+
+    const statusEl = document.getElementById('status');
+    const startBtn = document.getElementById('start-btn');
+    const stopBtn = document.getElementById('stop-btn');
+    const video = document.getElementById('video');
+    const overlay = document.getElementById('overlay');
+    const recognizedList = document.getElementById('recognized-list');
+    const recognizedEmpty = document.getElementById('recognized-empty');
+
+    let labeledDescriptors = [];
+    let matcher = null;
+    let stream = null;
+    let detectionLoop = null;
+    const recognizedThisSession = new Set();
+
+    function setStatus(text) { statusEl.textContent = text; }
+
+    async function loadModelsAndStudents() {
+      try {
+        setStatus('Loading face detection models…');
+        await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+        await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
+        await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
+
+        setStatus('Loading registered students…');
+        const res = await fetch(STUDENTS_URL);
+        const students = await res.json();
+
+        if (students.length === 0) {
+          setStatus('No students registered yet. Add some on the Students page first.');
+          return;
+        }
+
+        let loaded = 0, skipped = 0;
+        for (const s of students) {
+          try {
+            const img = await faceapi.fetchImage(s.image_url);
+            const detection = await faceapi
+              .detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 416 }))
+              .withFaceLandmarks()
+              .withFaceDescriptor();
+            if (detection) {
+              labeledDescriptors.push(new faceapi.LabeledFaceDescriptors(
+                `${s.name}|${s.roll_number}`, [detection.descriptor]
+              ));
+              loaded++;
+            } else {
+              skipped++;
+              console.warn('No face found in image for', s.name, s.roll_number);
+            }
+          } catch (e) {
+            skipped++;
+            console.error('Error encoding student', s, e);
+          }
+        }
+
+        if (labeledDescriptors.length === 0) {
+          setStatus('Could not detect faces in any registered student photo. Use clearer photos.');
+          return;
+        }
+
+        matcher = new faceapi.FaceMatcher(labeledDescriptors, MATCH_THRESHOLD);
+        setStatus(`Ready. Loaded ${loaded} student(s)${skipped ? `, skipped ${skipped}` : ''}. Click "Start Camera".`);
+        startBtn.disabled = false;
+      } catch (e) {
+        console.error(e);
+        setStatus('Failed to load models. Check your internet connection and refresh.');
+      }
+    }
+
+    async function startCamera() {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'user' }, audio: false
+        });
+      } catch (e) {
+        setStatus('Camera access denied or unavailable: ' + e.message);
+        return;
+      }
+
+      video.srcObject = stream;
+      startBtn.style.display = 'none';
+      stopBtn.style.display = 'inline-block';
+      setStatus('Camera running. Point at a registered face…');
+
+      await new Promise(r => video.addEventListener('loadedmetadata', r, { once: true }));
+      overlay.width = video.videoWidth;
+      overlay.height = video.videoHeight;
+
+      const ctx = overlay.getContext('2d');
+
+      const tick = async () => {
+        if (!stream) return;
+        try {
+          const detections = await faceapi
+            .detectAllFaces(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 320 }))
+            .withFaceLandmarks()
+            .withFaceDescriptors();
+
+          ctx.clearRect(0, 0, overlay.width, overlay.height);
+
+          for (const d of detections) {
+            const best = matcher ? matcher.findBestMatch(d.descriptor) : null;
+            const isUnknown = !best || best.label === 'unknown';
+            let name = 'Unknown', roll = '';
+            if (!isUnknown) [name, roll] = best.label.split('|');
+
+            const { x, y, width, height } = d.detection.box;
+            const color = isUnknown ? '#ef4444' : '#10b981';
+
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 3;
+            ctx.strokeRect(x, y, width, height);
+
+            const label = isUnknown ? 'Unknown' : `${name} (${roll})`;
+            ctx.font = '600 14px sans-serif';
+            const padding = 6;
+            const textWidth = ctx.measureText(label).width + padding * 2;
+            ctx.fillStyle = color;
+            ctx.fillRect(x, y + height, Math.max(textWidth, width), 24);
+            ctx.fillStyle = 'white';
+            ctx.fillText(label, x + padding, y + height + 16);
+
+            if (!isUnknown && !recognizedThisSession.has(best.label)) {
+              recognizedThisSession.add(best.label);
+              addRecognized(name, roll);
+              fetch(MARK_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, roll_number: roll })
+              }).catch(console.error);
+            }
+          }
+        } catch (e) {
+          console.error('Detection error:', e);
+        }
+        detectionLoop = setTimeout(tick, 250);
+      };
+
+      tick();
+    }
+
+    function stopCamera() {
+      if (detectionLoop) { clearTimeout(detectionLoop); detectionLoop = null; }
+      if (stream) {
+        stream.getTracks().forEach(t => t.stop());
+        stream = null;
+      }
+      video.srcObject = null;
+      const ctx = overlay.getContext('2d');
+      ctx.clearRect(0, 0, overlay.width, overlay.height);
+      startBtn.style.display = 'inline-block';
+      stopBtn.style.display = 'none';
+      setStatus('Camera stopped.');
+    }
+
+    function addRecognized(name, roll) {
+      if (recognizedEmpty) recognizedEmpty.style.display = 'none';
+      const li = document.createElement('li');
+      li.textContent = `${name} (${roll}) — ${new Date().toLocaleTimeString()}`;
+      recognizedList.appendChild(li);
+    }
+
+    startBtn.addEventListener('click', startCamera);
+    stopBtn.addEventListener('click', stopCamera);
+    loadModelsAndStudents();
+  </script>
+{% endblock %}

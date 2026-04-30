@@ -16,6 +16,8 @@
          class="{% if request.endpoint in ['list_students','add_student'] %}active{% endif %}">Students</a>
       <a href="{{ url_for('view_attendance') }}"
          class="{% if request.endpoint == 'view_attendance' %}active{% endif %}">Attendance</a>
+      <a href="{{ url_for('camera') }}"
+         class="{% if request.endpoint == 'camera' %}active{% endif %}">Test Camera</a>
     </nav>
   </header>
 

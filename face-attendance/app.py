@@ -12,7 +12,8 @@ import csv
 from datetime import datetime
 
 from flask import (
-    Flask, render_template, request, redirect, url_for, flash, send_from_directory
+    Flask, render_template, request, redirect, url_for, flash,
+    send_from_directory, jsonify
 )
 from werkzeug.utils import secure_filename
 
@@ -179,6 +180,57 @@ def view_attendance():
 @app.route("/students/image/<path:filename>")
 def student_image(filename: str):
     return send_from_directory(STUDENTS_DIR, filename)
+
+
+# ---------------- Camera test (browser-based) ----------------
+@app.route("/camera")
+def camera():
+    """Live face-recognition test page using the browser's webcam."""
+    return render_template("camera.html")
+
+
+@app.route("/api/students")
+def api_students():
+    """JSON list of students with image URLs (used by the camera test page)."""
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT id, name, roll_number, image_path FROM students"
+        ).fetchall()
+    return jsonify([
+        {
+            "id": r["id"],
+            "name": r["name"],
+            "roll_number": r["roll_number"],
+            "image_url": url_for("student_image", filename=r["image_path"]),
+        }
+        for r in rows
+    ])
+
+
+@app.route("/api/mark-attendance", methods=["POST"])
+def api_mark_attendance():
+    """Append a row to attendance.csv (one entry per student per day)."""
+    data = request.get_json(silent=True) or {}
+    name = (data.get("name") or "").strip()
+    roll = (data.get("roll_number") or "").strip()
+    if not name or not roll:
+        return jsonify({"ok": False, "error": "name and roll_number required"}), 400
+
+    today = datetime.now().strftime("%Y-%m-%d")
+
+    # Avoid duplicate entries for the same student on the same day
+    if os.path.exists(ATTENDANCE_CSV):
+        with open(ATTENDANCE_CSV, "r", newline="") as f:
+            for row in csv.DictReader(f):
+                if row.get("Roll Number") == roll and row.get("Date") == today:
+                    return jsonify({"ok": True, "duplicate": True})
+
+    now = datetime.now()
+    with open(ATTENDANCE_CSV, "a", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow([name, roll, today, now.strftime("%H:%M:%S")])
+
+    return jsonify({"ok": True, "duplicate": False, "time": now.strftime("%H:%M:%S")})
 
 
 # ---------------- Entry point ----------------

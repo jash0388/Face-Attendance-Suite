@@ -20,8 +20,9 @@
     <h2 style="margin-top:0">How to use</h2>
     <ol>
       <li>Go to <a href="{{ url_for('add_student') }}">Students &rarr; Add Student</a> and register a face.</li>
-      <li>Run <code>python main.py</code> in a terminal to start the recognizer.</li>
-      <li>Open the <a href="{{ url_for('view_attendance') }}">Attendance</a> page to see live records.</li>
+      <li>Click <a href="{{ url_for('camera') }}">Test Camera</a> to try recognition right in the browser, or run <code>python main.py</code> locally for the full OpenCV version.</li>
+      <li>Open the <a href="{{ url_for('view_attendance') }}">Attendance</a> page to see records.</li>
     </ol>
+    <a href="{{ url_for('camera') }}" class="btn btn-primary">Open Test Camera</a>
   </div>
 {% endblock %}
