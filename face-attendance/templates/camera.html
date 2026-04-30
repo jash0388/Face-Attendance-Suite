@@ -99,21 +99,62 @@
       return null;
     }
 
+    function describeError(e) {
+      if (e == null) return 'Unknown error (null/undefined was thrown).';
+      const parts = [];
+      if (e.name) parts.push(`name: ${e.name}`);
+      if (e.message) parts.push(`message: ${e.message}`);
+      try {
+        const own = Object.getOwnPropertyNames(e)
+          .filter(k => !['name','message','stack'].includes(k))
+          .reduce((acc, k) => { try { acc[k] = e[k]; } catch (_) {} return acc; }, {});
+        if (Object.keys(own).length) parts.push('details: ' + JSON.stringify(own));
+      } catch (_) {}
+      const str = String(e);
+      if (str && str !== '[object Object]' && str !== `Error: ${e.message || ''}`) {
+        parts.push('toString: ' + str);
+      }
+      if (e.stack) parts.push('stack:\n' + e.stack);
+      return parts.join('\n') || 'Unknown error.';
+    }
+
+    async function runStep(label, fn) {
+      setStatus(label + '…');
+      try {
+        return await fn();
+      } catch (e) {
+        const msg = `Step failed: "${label}"\n\n${describeError(e)}`;
+        throw new Error(msg);
+      }
+    }
+
     async function loadModelsAndStudents() {
       try {
         if (typeof faceapi === 'undefined') {
           throw new Error('face-api.js library did not load. Check the network tab.');
         }
 
-        setStatus('Loading face detection models…');
-        await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
-        await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
-        await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
+        // Safari + WebGL + face-api.js often crash when compiling shaders.
+        // Force the CPU backend, which is slower but works everywhere.
+        await runStep('Initialising TensorFlow (CPU backend)', async () => {
+          if (faceapi.tf && faceapi.tf.setBackend) {
+            try { await faceapi.tf.setBackend('cpu'); } catch (_) {}
+            if (faceapi.tf.ready) await faceapi.tf.ready();
+          }
+        });
 
-        setStatus('Loading registered students…');
-        const res = await fetch(STUDENTS_URL);
-        if (!res.ok) throw new Error('Failed to fetch student list: HTTP ' + res.status);
-        const students = await res.json();
+        await runStep('Loading face detector', () =>
+          faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL));
+        await runStep('Loading face landmarks', () =>
+          faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL));
+        await runStep('Loading face recognition', () =>
+          faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL));
+
+        const students = await runStep('Fetching student list', async () => {
+          const res = await fetch(STUDENTS_URL);
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          return res.json();
+        });
 
         if (students.length === 0) {
           setStatus('No students registered yet. Add some on the Students page first.');
@@ -162,7 +203,7 @@
       } catch (e) {
         console.error(e);
         setStatus('Failed during initialisation.');
-        showError(e.stack || e.message || String(e));
+        showError(describeError(e));
       }
     }
 
