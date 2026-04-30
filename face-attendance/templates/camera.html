@@ -4,13 +4,19 @@
 {% block content %}
   <h1>Test Camera</h1>
   <p class="subtitle">
-    Live face recognition using your browser's webcam. Green = recognised student, Red = unknown.
+    Live face recognition using your browser's webcam.
+    <span style="color: var(--success); font-weight:600;">Green</span> = recognised,
+    <span style="color: var(--danger); font-weight:600;">Red</span> = unknown.
   </p>
 
   <div class="card">
     <div id="status" style="margin-bottom: 0.75rem; color: var(--muted);">
       Initialising&hellip;
     </div>
+    <div id="error-detail"
+         style="display:none; background:#fef2f2; color:#b91c1c; padding:0.6rem 0.8rem;
+                border-radius:6px; font-family: ui-monospace, monospace; font-size:0.85rem;
+                white-space:pre-wrap; margin-bottom: 0.75rem;"></div>
 
     <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
       <button id="start-btn" class="btn btn-primary" disabled>Start Camera</button>
@@ -36,14 +42,15 @@
     </ul>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+  <script src="{{ url_for('static', filename='face-api.min.js') }}"></script>
   <script>
     const MODEL_URL = "{{ url_for('static', filename='models') }}";
-    const MATCH_THRESHOLD = 0.5;
+    const MATCH_THRESHOLD = 0.55;
     const STUDENTS_URL = "{{ url_for('api_students') }}";
     const MARK_URL = "{{ url_for('api_mark_attendance') }}";
 
     const statusEl = document.getElementById('status');
+    const errorEl = document.getElementById('error-detail');
     const startBtn = document.getElementById('start-btn');
     const stopBtn = document.getElementById('stop-btn');
     const video = document.getElementById('video');
@@ -58,9 +65,46 @@
     const recognizedThisSession = new Set();
 
     function setStatus(text) { statusEl.textContent = text; }
+    function showError(msg) {
+      errorEl.style.display = 'block';
+      errorEl.textContent = msg;
+    }
+
+    // Load an image as a cross-origin-safe HTMLImageElement that face-api can
+    // read from a canvas without tainting it.
+    function loadImage(url) {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error('Failed to load image: ' + url));
+        img.src = url;
+      });
+    }
+
+    async function encodeStudent(s) {
+      const img = await loadImage(s.image_url);
+
+      // Try a few input sizes — bigger = more accurate but slower.
+      const sizes = [512, 416, 320, 224];
+      for (const inputSize of sizes) {
+        const det = await faceapi
+          .detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({
+            inputSize, scoreThreshold: 0.4
+          }))
+          .withFaceLandmarks()
+          .withFaceDescriptor();
+        if (det) return det.descriptor;
+      }
+      return null;
+    }
 
     async function loadModelsAndStudents() {
       try {
+        if (typeof faceapi === 'undefined') {
+          throw new Error('face-api.js library did not load. Check the network tab.');
+        }
+
         setStatus('Loading face detection models…');
         await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
         await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
@@ -68,6 +112,7 @@
 
         setStatus('Loading registered students…');
         const res = await fetch(STUDENTS_URL);
+        if (!res.ok) throw new Error('Failed to fetch student list: HTTP ' + res.status);
         const students = await res.json();
 
         if (students.length === 0) {
@@ -75,50 +120,64 @@
           return;
         }
 
-        let loaded = 0, skipped = 0;
+        let loaded = 0;
+        const skippedNames = [];
         for (const s of students) {
+          setStatus(`Encoding ${s.name} (${s.roll_number})…`);
           try {
-            const img = await faceapi.fetchImage(s.image_url);
-            const detection = await faceapi
-              .detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 416 }))
-              .withFaceLandmarks()
-              .withFaceDescriptor();
-            if (detection) {
+            const descriptor = await encodeStudent(s);
+            if (descriptor) {
               labeledDescriptors.push(new faceapi.LabeledFaceDescriptors(
-                `${s.name}|${s.roll_number}`, [detection.descriptor]
+                `${s.name}|${s.roll_number}`, [descriptor]
               ));
               loaded++;
             } else {
-              skipped++;
-              console.warn('No face found in image for', s.name, s.roll_number);
+              skippedNames.push(`${s.name} (no face found in photo)`);
             }
           } catch (e) {
-            skipped++;
-            console.error('Error encoding student', s, e);
+            console.error('Encoding error for', s, e);
+            skippedNames.push(`${s.name} (${e.message})`);
           }
         }
 
         if (labeledDescriptors.length === 0) {
-          setStatus('Could not detect faces in any registered student photo. Use clearer photos.');
+          setStatus('Could not detect a face in any registered student photo.');
+          showError(
+            'Skipped:\n  - ' + skippedNames.join('\n  - ') +
+            '\n\nTip: re-upload a clear, well-lit, front-facing photo where the face fills most of the frame.'
+          );
+          // Still allow camera so user can at least see "Unknown" detection.
+          startBtn.disabled = false;
           return;
         }
 
         matcher = new faceapi.FaceMatcher(labeledDescriptors, MATCH_THRESHOLD);
-        setStatus(`Ready. Loaded ${loaded} student(s)${skipped ? `, skipped ${skipped}` : ''}. Click "Start Camera".`);
+        let msg = `Ready. Loaded ${loaded} student(s). Click "Start Camera".`;
+        if (skippedNames.length) msg += ` (Skipped ${skippedNames.length}.)`;
+        setStatus(msg);
+        if (skippedNames.length) {
+          showError('Skipped:\n  - ' + skippedNames.join('\n  - '));
+        }
         startBtn.disabled = false;
       } catch (e) {
         console.error(e);
-        setStatus('Failed to load models. Check your internet connection and refresh.');
+        setStatus('Failed during initialisation.');
+        showError(e.stack || e.message || String(e));
       }
     }
 
     async function startCamera() {
       try {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          throw new Error('Your browser does not support camera access. Try Safari or Chrome.');
+        }
         stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: 'user' }, audio: false
         });
       } catch (e) {
-        setStatus('Camera access denied or unavailable: ' + e.message);
+        setStatus('Camera access failed.');
+        showError(e.message + '\n\nIf you are on a phone, the page must be HTTPS. ' +
+                  'Tap the address bar permissions icon to grant camera access.');
         return;
       }
 
@@ -128,6 +187,7 @@
       setStatus('Camera running. Point at a registered face…');
 
       await new Promise(r => video.addEventListener('loadedmetadata', r, { once: true }));
+      await video.play().catch(() => {});
       overlay.width = video.videoWidth;
       overlay.height = video.videoHeight;
 
