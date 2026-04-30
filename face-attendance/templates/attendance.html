@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Attendance - Face Attendance{% endblock %}
+
+{% block content %}
+  <h1>Attendance</h1>
+  <p class="subtitle">Newest entries first. Records are stored in <code>attendance.csv</code>.</p>
+
+  {% if rows %}
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Roll Number</th>
+          <th>Date</th>
+          <th>Time</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+          <tr>
+            <td>{{ r['Name'] }}</td>
+            <td>{{ r['Roll Number'] }}</td>
+            <td>{{ r['Date'] }}</td>
+            <td>{{ r['Time'] }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <div class="card empty">
+      No attendance recorded yet. Run <code>python main.py</code> to start the recognizer.
+    </div>
+  {% endif %}
+{% endblock %}

@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - Face Attendance{% endblock %}
+
+{% block content %}
+  <h1>Dashboard</h1>
+  <p class="subtitle">Quick overview of your attendance system.</p>
+
+  <div class="stats">
+    <div class="stat">
+      <div class="label">Registered Students</div>
+      <div class="value">{{ total_students }}</div>
+    </div>
+    <div class="stat">
+      <div class="label">Attendance Today ({{ today }})</div>
+      <div class="value">{{ today_count }}</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2 style="margin-top:0">How to use</h2>
+    <ol>
+      <li>Go to <a href="{{ url_for('add_student') }}">Students &rarr; Add Student</a> and register a face.</li>
+      <li>Run <code>python main.py</code> in a terminal to start the recognizer.</li>
+      <li>Open the <a href="{{ url_for('view_attendance') }}">Attendance</a> page to see live records.</li>
+    </ol>
+  </div>
+{% endblock %}

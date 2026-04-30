@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>{% block title %}Attendance Admin{% endblock %}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <header class="navbar">
+    <a class="brand" href="{{ url_for('index') }}">Face Attendance</a>
+    <nav>
+      <a href="{{ url_for('index') }}"
+         class="{% if request.endpoint == 'index' %}active{% endif %}">Dashboard</a>
+      <a href="{{ url_for('list_students') }}"
+         class="{% if request.endpoint in ['list_students','add_student'] %}active{% endif %}">Students</a>
+      <a href="{{ url_for('view_attendance') }}"
+         class="{% if request.endpoint == 'view_attendance' %}active{% endif %}">Attendance</a>
+    </nav>
+  </header>
+
+  <main class="container">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <ul class="flashes">
+          {% for category, message in messages %}
+            <li class="{{ category }}">{{ message }}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+    {% endwith %}
+
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

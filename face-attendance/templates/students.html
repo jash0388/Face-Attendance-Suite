@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Students - Face Attendance{% endblock %}
+
+{% block content %}
+  <div class="toolbar">
+    <div>
+      <h1>Students</h1>
+      <p class="subtitle">{{ students|length }} registered</p>
+    </div>
+    <a href="{{ url_for('add_student') }}" class="btn btn-primary">+ Add Student</a>
+  </div>
+
+  {% if students %}
+    <table>
+      <thead>
+        <tr>
+          <th>Photo</th>
+          <th>Name</th>
+          <th>Roll Number</th>
+          <th>Added</th>
+          <th style="text-align:right">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in students %}
+          <tr>
+            <td>
+              <img class="thumb"
+                   src="{{ url_for('student_image', filename=s['image_path']) }}"
+                   alt="{{ s['name'] }}">
+            </td>
+            <td>{{ s['name'] }}</td>
+            <td>{{ s['roll_number'] }}</td>
+            <td>{{ s['created_at'][:10] }}</td>
+            <td style="text-align:right" class="row-actions">
+              <form method="POST"
+                    action="{{ url_for('delete_student', student_id=s['id']) }}"
+                    onsubmit="return confirm('Delete {{ s['name'] }}?');">
+                <button type="submit" class="btn btn-danger">Delete</button>
+              </form>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <div class="card empty">
+      No students yet. Click <strong>+ Add Student</strong> to register the first one.
+    </div>
+  {% endif %}
+{% endblock %}

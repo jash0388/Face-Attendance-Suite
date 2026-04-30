@@ -1,27 +1,33 @@
-# Workspace
+# Face Recognition Attendance System
 
-## Overview
+A simple, beginner-friendly Python project with two parts:
 
-pnpm workspace monorepo using TypeScript. Each package manages its own dependencies.
+- **`face-attendance/app.py`** — Flask admin panel (Add / View / Delete students, view attendance).
+- **`face-attendance/main.py`** — OpenCV + `face_recognition` runner that opens a webcam / RTSP / HTTP camera, recognises registered students, and writes attendance to `attendance.csv`.
+
+## Project Layout
+
+```
+face-attendance/
+├── app.py              # Flask admin panel
+├── main.py             # Face recognition runner
+├── requirements.txt
+├── README.md           # Full setup & usage instructions
+├── students/           # Stored student face images
+├── static/style.css    # Admin panel styling
+├── templates/          # Jinja2 HTML templates
+├── database.db         # SQLite (auto-created)
+└── attendance.csv      # Attendance log (auto-created)
+```
+
+## Running
+
+- The Flask admin panel runs in this Repl on port 5000 (workflow: `Start application`).
+- The recognition script (`main.py`) needs a real camera, so run it **on your local machine**. See `face-attendance/README.md` for full install + usage instructions.
 
 ## Stack
 
-- **Monorepo tool**: pnpm workspaces
-- **Node.js version**: 24
-- **Package manager**: pnpm
-- **TypeScript version**: 5.9
-- **API framework**: Express 5
-- **Database**: PostgreSQL + Drizzle ORM
-- **Validation**: Zod (`zod/v4`), `drizzle-zod`
-- **API codegen**: Orval (from OpenAPI spec)
-- **Build**: esbuild (CJS bundle)
-
-## Key Commands
-
-- `pnpm run typecheck` — full typecheck across all packages
-- `pnpm run build` — typecheck + build all packages
-- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- `pnpm --filter @workspace/api-server run dev` — run API server locally
-
-See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details.
+- Python 3.11
+- Flask 3
+- SQLite (stdlib)
+- OpenCV + `face_recognition` (dlib) — for the recognition script
