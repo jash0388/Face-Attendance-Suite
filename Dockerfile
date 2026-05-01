@@ -16,16 +16,22 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
+# Install build-time requirements
+RUN pip install --no-cache-dir setuptools wheel
+
 # Copy requirements and install
+# Note: face-attendance/requirements.txt is relative to the root build context
 COPY face-attendance/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the rest of the app
 COPY face-attendance/ .
 
-# Create storage directory
-RUN mkdir -p students
+# Ensure storage directories exist
+RUN mkdir -p students static/uploads
 
+# Railway uses the PORT environment variable
+ENV PORT=3000
 EXPOSE 3000
 
 CMD ["python", "app.py"]
