@@ -18,6 +18,8 @@ from flask import (
     send_from_directory, jsonify
 )
 from werkzeug.utils import secure_filename
+import face_recognition
+import numpy as np
 
 # ---------------- Configuration ----------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -132,10 +134,11 @@ def add_student():
             file.save(save_path)
 
             # 2. CALCULATE ENCODING FROM SAVED FILE
-            import face_recognition
+            print(f">>> ENCODING FACE FOR: {name}")
             img = face_recognition.load_image_file(save_path)
             face_encs = face_recognition.face_encodings(img)
             encoding_blob = face_encs[0].tobytes() if face_encs else None
+            print(f">>> ENCODING COMPLETE. FOUND: {len(face_encs)} FACE(S)")
 
             # 3. SAVE TO DATABASE
             with get_db() as conn:
@@ -214,7 +217,6 @@ known_encodings = []
 known_labels = []
 
 def reload_encodings():
-    import numpy as np
     global known_encodings, known_labels
     encs = []
     labs = []

@@ -101,14 +101,32 @@
     }
 
     document.getElementById('add-student-form').addEventListener('submit', function(e) {
+      const submitBtn = document.getElementById('btn-submit');
       if (document.getElementById('mode-webcam').style.display !== 'none') {
         if (!capturedBlob) { e.preventDefault(); alert('CAPTURE_IMAGE_REQUIRED'); return; }
         e.preventDefault();
+        
+        // Show loading state
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'PROCESSING_FACE...';
+        
         const formData = new FormData(this);
         formData.delete('image');
         formData.append('image', capturedBlob, (formData.get('roll_number') || 'capture') + '.jpg');
+        
         fetch(this.action || window.location.href, { method: 'POST', body: formData })
-          .then(res => { window.location.href = res.redirected ? res.url : '{{ url_for("list_students") }}'; });
+          .then(res => { 
+            window.location.href = res.redirected ? res.url : '{{ url_for("list_students") }}'; 
+          })
+          .catch(err => {
+            alert('ERROR: ' + err.message);
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'SAVE_RECORD';
+          });
+      } else {
+        // Regular file upload
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'UPLOADING...';
       }
     });
 
