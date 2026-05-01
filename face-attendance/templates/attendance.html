@@ -2,17 +2,17 @@
 {% block title %}LOGS - Face Attendance{% endblock %}
 
 {% block content %}
-  <h1>ATTENDANCE_LOGS</h1>
-  <p class="subtitle">PERSISTENT_STORAGE: attendance.csv</p>
+  <h1>Attendance Records</h1>
+  <p class="subtitle">Viewing latest attendance logs</p>
 
   {% if rows %}
     <table>
       <thead>
         <tr>
-          <th>NAME_STRING</th>
-          <th>ROLL_CODE</th>
-          <th>DATE_ISO</th>
-          <th>TIME_UTC</th>
+          <th>Name</th>
+          <th>Roll Number</th>
+          <th>Date</th>
+          <th>Time</th>
         </tr>
       </thead>
       <tbody>
@@ -28,7 +28,7 @@
     </table>
   {% else %}
     <div class="card">
-      LOGS_EMPTY: NO DATA STREAM DETECTED.
+      No attendance records found for today.
     </div>
   {% endif %}
 {% endblock %}

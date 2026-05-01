@@ -2,41 +2,41 @@
 {% block title %}Scanner - Face Attendance{% endblock %}
 
 {% block content %}
-  <h1>CAMERA_SCAN</h1>
+  <h1>Scan Attendance</h1>
   <p class="subtitle">
-    [DETECTION_ACTIVE] SYSTEM READY
+    The scanner is ready to detect faces
   </p>
 
   <div class="card">
     <div style="display:flex; align-items:center; margin-bottom:1rem;">
-      <div id="status">INITIALISING_SYSTEM...</div>
+      <div id="status">Loading the scanner...</div>
       <div id="perf-badge" style="display:none;">-- MS / -- FPS</div>
     </div>
 
     <div id="error-detail" style="display:none; border:1px solid var(--border); padding:1rem; margin-bottom:1rem; font-size:0.8rem; color:var(--text);"></div>
 
     <div id="mode-selector" style="margin-bottom: 1.5rem; border-bottom: 1px solid var(--border); padding-bottom: 1rem;">
-      <div style="font-size: 0.7rem; margin-bottom: 0.5rem;">[SCANNER_MODE_CONFIGURATION]</div>
+      <div style="font-size: 0.7rem; margin-bottom: 0.5rem;">Camera Settings</div>
       <div style="display:flex; gap:1rem; align-items:center; flex-wrap:wrap;">
-      <button id="mode-browser-btn" class="btn active" onclick="switchScannerMode('browser')">WEBCAM_LOCAL</button>
-      <button id="mode-cctv-btn" class="btn" onclick="switchScannerMode('cctv')">CCTV_REMOTE</button>
+      <button id="mode-browser-btn" class="btn active" onclick="switchScannerMode('browser')">Computer Camera</button>
+      <button id="mode-cctv-btn" class="btn" onclick="switchScannerMode('cctv')">External CCTV</button>
       
       <div id="cctv-config" style="display:none; gap:0.5rem; align-items:center;">
         <input type="text" id="rtsp-url" class="btn" style="text-transform:none; width:300px;" placeholder="rtsp://user:pass@ip:port/stream">
-        <button id="set-cctv-btn" class="btn" onclick="applyCctv()">APPLY</button>
+        <button id="set-cctv-btn" class="btn" onclick="applyCctv()">Apply</button>
       </div>
 
       <select id="quality-select" class="btn" style="text-transform:none;">
-        <option value="128">TURBO_128</option>
-        <option value="160" selected>FAST_160</option>
-        <option value="224">BALANCED_224</option>
-        <option value="320">ACCURATE_320</option>
+        <option value="128">Super Fast (Low quality)</option>
+        <option value="160" selected>Fast (Standard)</option>
+        <option value="224">Balanced</option>
+        <option value="320">Accurate (Slower)</option>
       </select>
     </div>
 
     <div style="display:flex; gap:1rem; margin-bottom:1rem; align-items:center;">
-      <button id="start-btn" class="btn" disabled>START_SCANNER</button>
-      <button id="stop-btn"  class="btn" style="display:none">STOP_SCANNER</button>
+      <button id="start-btn" class="btn" disabled>Start Scanning</button>
+      <button id="stop-btn"  class="btn" style="display:none">Stop Scanning</button>
     </div>
 
     <div id="video-wrap" style="display: block; margin: 0 auto; text-align: center;">
@@ -53,9 +53,9 @@
   </div>
 
   <div class="card">
-    <h2>LOG_RECOGNIZED_ENTRIES</h2>
+    <h2>Scanned Students (This Session)</h2>
     <ul id="recognized-list">
-      <li id="recognized-empty">NO_DATA_YET</li>
+      <li id="recognized-empty">No one scanned yet</li>
     </ul>
   </div>
 
@@ -232,7 +232,7 @@
       startBtn.style.display = 'inline-block';
       stopBtn.style.display = 'none';
       perfBadge.style.display = 'none';
-      setStatus('CAMERA_STOPPED');
+      setStatus('Camera stopped');
     }
 
     async function detectionLoop() {

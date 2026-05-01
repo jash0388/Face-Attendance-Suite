@@ -4,21 +4,21 @@
 {% block content %}
   <div class="toolbar">
     <div>
-      <h1>STUDENT_DATABASE</h1>
-      <p class="subtitle">TOTAL_RECORDS: {{ students|length }}</p>
+      <h1>Registered Students</h1>
+      <p class="subtitle">Total Count: {{ students|length }}</p>
     </div>
-    <a href="{{ url_for('add_student') }}" class="btn">NEW_ENTRY</a>
+    <a href="{{ url_for('add_student') }}" class="btn">Add Student</a>
   </div>
 
   {% if students %}
     <table>
       <thead>
         <tr>
-          <th>UID</th>
-          <th>NAME_STRING</th>
-          <th>ROLL_CODE</th>
-          <th>TIMESTAMP</th>
-          <th style="text-align:right">EXEC</th>
+          <th>Photo</th>
+          <th>Name</th>
+          <th>Roll Number</th>
+          <th>Date Added</th>
+          <th style="text-align:right">Actions</th>
         </tr>
       </thead>
       <tbody>
@@ -35,8 +35,8 @@
             <td style="text-align:right">
               <form method="POST"
                     action="{{ url_for('delete_student', student_id=s['id']) }}"
-                    onsubmit="return confirm('DELETE_RECORD: {{ s['name'] }}?');">
-                <button type="submit" class="btn">DEL</button>
+                    onsubmit="return confirm('Are you sure you want to remove {{ s['name'] }}?');">
+                <button type="submit" class="btn">Remove</button>
               </form>
             </td>
           </tr>
@@ -45,7 +45,7 @@
     </table>
   {% else %}
     <div class="card">
-      DB_EMPTY: NO RECORDS FOUND.
+      No students found in the system.
     </div>
   {% endif %}
 {% endblock %}

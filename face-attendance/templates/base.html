@@ -8,12 +8,12 @@
 </head>
 <body>
   <header class="navbar">
-    <a class="brand" href="{{ url_for('index') }}">FACE_ATTENDANCE_v1.0</a>
+    <a class="brand" href="{{ url_for('index') }}">Big Brains | Face Attendance</a>
     <nav>
-      <a href="{{ url_for('index') }}" class="{% if request.endpoint == 'index' %}active{% endif %}">DASHBOARD</a>
-      <a href="{{ url_for('list_students') }}" class="{% if request.endpoint in ['list_students','add_student'] %}active{% endif %}">DATABASE</a>
-      <a href="{{ url_for('view_attendance') }}" class="{% if request.endpoint == 'view_attendance' %}active{% endif %}">LOGS</a>
-      <a href="{{ url_for('camera') }}" class="{% if request.endpoint == 'camera' %}active{% endif %}">SCANNER</a>
+      <a href="{{ url_for('index') }}" class="{% if request.endpoint == 'index' %}active{% endif %}">Dashboard</a>
+      <a href="{{ url_for('list_students') }}" class="{% if request.endpoint in ['list_students','add_student'] %}active{% endif %}">Students</a>
+      <a href="{{ url_for('view_attendance') }}" class="{% if request.endpoint == 'view_attendance' %}active{% endif %}">Attendance Records</a>
+      <a href="{{ url_for('camera') }}" class="{% if request.endpoint == 'camera' %}active{% endif %}">Live Camera</a>
     </nav>
   </header>
 
@@ -30,6 +30,10 @@
 
     {% block content %}{% endblock %}
   </main>
+
+  <footer style="text-align: center; padding: 2rem; color: var(--text-dim); font-size: 0.8rem; border-top: 1px solid var(--border); margin-top: 4rem;">
+    Powered by <strong>Big Brains</strong> &copy; 2026
+  </footer>
 </body>
 </html>
 

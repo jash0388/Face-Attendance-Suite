@@ -2,30 +2,30 @@
 {% block title %}DASHBOARD - Face Attendance{% endblock %}
 
 {% block content %}
-  <h1>SYSTEM_OVERVIEW</h1>
-  <p class="subtitle">STATUS: ACTIVE | DATE: {{ today }}</p>
+  <h1>Dashboard</h1>
+  <p class="subtitle">System Online | Date: {{ today }}</p>
 
   <div class="stats">
     <div class="stat">
-      <div class="label">TOTAL_STUDENTS_REGISTERED</div>
+      <div class="label">Total Students</div>
       <div class="value">{{ total_students }}</div>
     </div>
     <div class="stat">
-      <div class="label">ATTENDANCE_COUNT_TODAY</div>
+      <div class="label">Attendance Today</div>
       <div class="value">{{ today_count }}</div>
     </div>
   </div>
 
   <div class="card">
-    <h2>OPERATIONAL_GUIDE</h2>
+    <h2>How it works</h2>
     <ul style="list-style: none; padding: 0;">
-      <li style="margin-bottom: 0.5rem;">[01] REGISTER_FACES: ADD STUDENT RECORDS TO DATABASE.</li>
-      <li style="margin-bottom: 0.5rem;">[02] SCAN_ENTRY: INITIALISE SCANNER (WEBCAM OR CCTV).</li>
-      <li style="margin-bottom: 0.5rem;">[03] EXPORT_LOGS: VIEW AND VERIFY ATTENDANCE RECORDS.</li>
+      <li style="margin-bottom: 0.5rem;">1. Add Students: Register new students and their photos.</li>
+      <li style="margin-bottom: 0.5rem;">2. Take Attendance: Open the camera to scan faces.</li>
+      <li style="margin-bottom: 0.5rem;">3. View Records: Check who is present today.</li>
     </ul>
     <div style="display: flex; gap: 1rem; margin-top: 1.5rem; flex-wrap: wrap; justify-content: center;">
-      <a href="{{ url_for('camera') }}" class="btn">INITIALISE_SCANNER</a>
-      <a href="{{ url_for('add_student') }}" class="btn">ADD_NEW_RECORD</a>
+      <a href="{{ url_for('camera') }}" class="btn">Open Camera</a>
+      <a href="{{ url_for('add_student') }}" class="btn">Add Student</a>
     </div>
   </div>
 {% endblock %}

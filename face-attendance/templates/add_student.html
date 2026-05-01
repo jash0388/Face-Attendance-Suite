@@ -2,26 +2,26 @@
 {% block title %}NEW_RECORD - Face Attendance{% endblock %}
 
 {% block content %}
-  <h1>ADD_NEW_RECORD</h1>
-  <p class="subtitle">INITIALISE_DATABASE_ENTRY: STUDENT_PROFILE</p>
+  <h1>Register New Student</h1>
+  <p class="subtitle">Fill in the details below to add a student</p>
 
   <div class="card" style="max-width:560px">
     <form id="add-student-form" method="POST" enctype="multipart/form-data">
       <div class="field">
-        <label for="name">NAME_STRING</label>
-        <input type="text" id="name" name="name" required placeholder="E.G. JOHN_DOE">
+        <label for="name">Full Name</label>
+        <input type="text" id="name" name="name" required placeholder="Enter student name">
       </div>
 
       <div class="field">
-        <label for="roll_number">ROLL_CODE</label>
-        <input type="text" id="roll_number" name="roll_number" required placeholder="E.G. BTCS101">
+        <label for="roll_number">Roll Number</label>
+        <input type="text" id="roll_number" name="roll_number" required placeholder="Enter roll number">
       </div>
 
       <div class="field">
-        <label>INPUT_METHOD</label>
+        <label>Add Photo</label>
         <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
-          <button type="button" class="btn" id="tab-upload" onclick="switchTab('upload')">UPLOAD_FILE</button>
-          <button type="button" class="btn" id="tab-webcam" onclick="switchTab('webcam')">WEBCAM_CAPTURE</button>
+          <button type="button" class="btn" id="tab-upload" onclick="switchTab('upload')">Upload Image</button>
+          <button type="button" class="btn" id="tab-webcam" onclick="switchTab('webcam')">Use Camera</button>
         </div>
 
         <div id="mode-upload">
@@ -32,17 +32,17 @@
           <video id="webcam-preview" autoplay muted playsinline style="width:100%; border:1px solid var(--border); filter: grayscale(100%);"></video>
           <canvas id="webcam-canvas" style="display:none;"></canvas>
           <div style="margin-top: 1rem; display: flex; gap: 0.5rem;">
-            <button type="button" class="btn" id="btn-start-cam" onclick="startWebcam()">START_CAM</button>
-            <button type="button" class="btn" id="btn-capture" onclick="capturePhoto()" style="display:none;">CAPTURE</button>
-            <button type="button" class="btn" id="btn-retake" onclick="retakePhoto()" style="display:none;">RETAKE</button>
+            <button type="button" class="btn" id="btn-start-cam" onclick="startWebcam()">Open Camera</button>
+            <button type="button" class="btn" id="btn-capture" onclick="capturePhoto()" style="display:none;">Take Photo</button>
+            <button type="button" class="btn" id="btn-retake" onclick="retakePhoto()" style="display:none;">Try Again</button>
           </div>
           <div id="capture-status" style="margin-top:0.5rem; font-size:0.75rem; text-transform:uppercase;"></div>
         </div>
       </div>
 
       <div style="display:flex; gap:1rem; margin-top:2rem;">
-        <button type="submit" class="btn" id="btn-submit">SAVE_RECORD</button>
-        <a href="{{ url_for('list_students') }}" class="btn">CANCEL</a>
+        <button type="submit" class="btn" id="btn-submit">Save Student</button>
+        <a href="{{ url_for('list_students') }}" class="btn">Cancel</a>
       </div>
     </form>
   </div>
@@ -108,7 +108,7 @@
         
         // Show loading state
         submitBtn.disabled = true;
-        submitBtn.textContent = 'PROCESSING_FACE...';
+        submitBtn.textContent = 'Saving Student...';
         
         const formData = new FormData(this);
         formData.delete('image');
@@ -119,14 +119,14 @@
             window.location.href = res.redirected ? res.url : '{{ url_for("list_students") }}'; 
           })
           .catch(err => {
-            alert('ERROR: ' + err.message);
+            alert('Error: ' + err.message);
             submitBtn.disabled = false;
-            submitBtn.textContent = 'SAVE_RECORD';
+            submitBtn.textContent = 'Save Student';
           });
       } else {
         // Regular file upload
         submitBtn.disabled = true;
-        submitBtn.textContent = 'UPLOADING...';
+        submitBtn.textContent = 'Uploading...';
       }
     });
 
