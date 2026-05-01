@@ -7,6 +7,7 @@ Then open:  http://localhost:5000
 """
 
 import os
+print(">>> INITIALIZING FACE ATTENDANCE APP...")
 import sqlite3
 import csv
 import threading
