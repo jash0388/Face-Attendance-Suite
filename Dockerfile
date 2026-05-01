@@ -1,14 +1,11 @@
-FROM python:3.11
+FROM python:3.11-bookworm
 
-# Install system dependencies for OpenCV and Dlib
+# Install ONLY essential system dependencies for dlib and opencv-headless
 RUN apt-get update && apt-get install -y \
     build-essential \
     cmake \
     libopenblas-dev \
     liblapack-dev \
-    libx11-dev \
-    libgtk-3-dev \
-    libboost-python-dev \
     libgl1-mesa-glx \
     libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
