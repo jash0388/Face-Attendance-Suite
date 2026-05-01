@@ -1,24 +1,24 @@
 {% extends "base.html" %}
-{% block title %}Attendance - Face Attendance{% endblock %}
+{% block title %}LOGS - Face Attendance{% endblock %}
 
 {% block content %}
-  <h1>Attendance</h1>
-  <p class="subtitle">Newest entries first. Records are stored in <code>attendance.csv</code>.</p>
+  <h1>ATTENDANCE_LOGS</h1>
+  <p class="subtitle">PERSISTENT_STORAGE: attendance.csv</p>
 
   {% if rows %}
     <table>
       <thead>
         <tr>
-          <th>Name</th>
-          <th>Roll Number</th>
-          <th>Date</th>
-          <th>Time</th>
+          <th>NAME_STRING</th>
+          <th>ROLL_CODE</th>
+          <th>DATE_ISO</th>
+          <th>TIME_UTC</th>
         </tr>
       </thead>
       <tbody>
         {% for r in rows %}
           <tr>
-            <td>{{ r['Name'] }}</td>
+            <td style="font-weight:700;">{{ r['Name'].upper() }}</td>
             <td>{{ r['Roll Number'] }}</td>
             <td>{{ r['Date'] }}</td>
             <td>{{ r['Time'] }}</td>
@@ -27,8 +27,9 @@
       </tbody>
     </table>
   {% else %}
-    <div class="card empty">
-      No attendance recorded yet. Run <code>python main.py</code> to start the recognizer.
+    <div class="card">
+      LOGS_EMPTY: NO DATA STREAM DETECTED.
     </div>
   {% endif %}
 {% endblock %}
+

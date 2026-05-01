@@ -47,3 +47,17 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+
+# Application Data
+face-attendance/database.db
+face-attendance/attendance.csv
+face-attendance/students/*
+!face-attendance/students/.gitkeep
+face-attendance/server.log

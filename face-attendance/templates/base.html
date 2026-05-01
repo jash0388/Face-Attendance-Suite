@@ -2,22 +2,18 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>{% block title %}Attendance Admin{% endblock %}</title>
+  <title>{% block title %}ATTENDANCE_SYSTEM{% endblock %}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
   <header class="navbar">
-    <a class="brand" href="{{ url_for('index') }}">Face Attendance</a>
+    <a class="brand" href="{{ url_for('index') }}">FACE_ATTENDANCE_v1.0</a>
     <nav>
-      <a href="{{ url_for('index') }}"
-         class="{% if request.endpoint == 'index' %}active{% endif %}">Dashboard</a>
-      <a href="{{ url_for('list_students') }}"
-         class="{% if request.endpoint in ['list_students','add_student'] %}active{% endif %}">Students</a>
-      <a href="{{ url_for('view_attendance') }}"
-         class="{% if request.endpoint == 'view_attendance' %}active{% endif %}">Attendance</a>
-      <a href="{{ url_for('camera') }}"
-         class="{% if request.endpoint == 'camera' %}active{% endif %}">Test Camera</a>
+      <a href="{{ url_for('index') }}" class="{% if request.endpoint == 'index' %}active{% endif %}">DASHBOARD</a>
+      <a href="{{ url_for('list_students') }}" class="{% if request.endpoint in ['list_students','add_student'] %}active{% endif %}">DATABASE</a>
+      <a href="{{ url_for('view_attendance') }}" class="{% if request.endpoint == 'view_attendance' %}active{% endif %}">LOGS</a>
+      <a href="{{ url_for('camera') }}" class="{% if request.endpoint == 'camera' %}active{% endif %}">SCANNER</a>
     </nav>
   </header>
 
@@ -26,7 +22,7 @@
       {% if messages %}
         <ul class="flashes">
           {% for category, message in messages %}
-            <li class="{{ category }}">{{ message }}</li>
+            <li>[{{ category }}] {{ message }}</li>
           {% endfor %}
         </ul>
       {% endif %}
@@ -36,3 +32,4 @@
   </main>
 </body>
 </html>
+

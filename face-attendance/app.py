@@ -9,6 +9,7 @@ Then open:  http://localhost:5000
 import os
 import sqlite3
 import csv
+import threading
 from datetime import datetime
 
 from flask import (
@@ -47,10 +48,16 @@ def init_db():
                 name        TEXT    NOT NULL,
                 roll_number TEXT    NOT NULL UNIQUE,
                 image_path  TEXT    NOT NULL,
+                encoding    BLOB,
                 created_at  TEXT    NOT NULL
             )
             """
         )
+        # Migration: Check if encoding column exists
+        try:
+            conn.execute("SELECT encoding FROM students LIMIT 1")
+        except sqlite3.OperationalError:
+            conn.execute("ALTER TABLE students ADD COLUMN encoding BLOB")
         conn.commit()
 
     # Make sure the attendance CSV exists with a header row
@@ -120,15 +127,24 @@ def add_student():
         save_path = os.path.join(STUDENTS_DIR, filename)
 
         try:
+            # Calculate encoding before saving
+            import face_recognition
+            img = face_recognition.load_image_file(save_path)
+            face_encs = face_recognition.face_encodings(img)
+            encoding_blob = face_encs[0].tobytes() if face_encs else None
+
             with get_db() as conn:
                 conn.execute(
                     """
-                    INSERT INTO students (name, roll_number, image_path, created_at)
-                    VALUES (?, ?, ?, ?)
+                    INSERT INTO students (name, roll_number, image_path, encoding, created_at)
+                    VALUES (?, ?, ?, ?, ?)
                     """,
-                    (name, roll, filename, datetime.now().isoformat(timespec="seconds")),
+                    (name, roll, filename, encoding_blob, datetime.now().isoformat(timespec="seconds")),
                 )
                 conn.commit()
+            
+            # Update live encodings
+            reload_encodings()
         except sqlite3.IntegrityError:
             flash(f"A student with roll number '{roll}' already exists.", "error")
             return redirect(url_for("add_student"))
@@ -183,6 +199,111 @@ def student_image(filename: str):
 
 
 # ---------------- Camera test (browser-based) ----------------
+# ---------------- CCTV / Backend Streaming ----------------
+camera_source = "0"  # Default to webcam
+known_encodings = []
+known_labels = []
+
+def reload_encodings():
+    import numpy as np
+    global known_encodings, known_labels
+    encs = []
+    labs = []
+    with get_db() as conn:
+        students = conn.execute("SELECT name, roll_number, encoding FROM students WHERE encoding IS NOT NULL").fetchall()
+    
+    for s in students:
+        # Load from BLOB instead of processing image file (MUCH FASTER)
+        vec = np.frombuffer(s["encoding"], dtype=np.float64)
+        encs.append(vec)
+        labs.append(f"{s['name']}|{s['roll_number']}")
+        
+    known_encodings = encs
+    known_labels = labs
+
+@app.route("/api/config-camera", methods=["POST"])
+def config_camera():
+    global camera_source
+    data = request.get_json(silent=True) or {}
+    source = data.get("source", "0")
+    camera_source = int(source) if source.isdigit() else source
+    return jsonify({"ok": True, "source": camera_source})
+
+def generate_frames():
+    import cv2
+    import face_recognition
+    import numpy as np
+    global camera_source, known_encodings, known_labels
+    if not known_encodings:
+        reload_encodings()
+        
+    cap = cv2.VideoCapture(camera_source)
+    marked_today = set() 
+    frame_count = 0
+    
+    last_face_data = []
+    
+    while True:
+        success, frame = cap.read()
+        if not success:
+            break
+        
+        frame_count += 1
+        # Only perform face recognition every 5th frame to save CPU
+        if frame_count % 5 == 0:
+            last_face_data = []
+            small_frame = cv2.resize(frame, (0, 0), fx=0.5, fy=0.5)
+            rgb_small = cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB)
+            
+            face_locations = face_recognition.face_locations(rgb_small)
+            face_encodings = face_recognition.face_encodings(rgb_small, face_locations)
+            
+            for (top, right, bottom, left), face_enc in zip(face_locations, face_encodings):
+                name, roll = "Unknown", ""
+                if known_encodings:
+                    distances = face_recognition.face_distance(known_encodings, face_enc)
+                    best_idx = int(np.argmin(distances))
+                    if distances[best_idx] <= 0.58:
+                        name, roll = known_labels[best_idx].split("|")
+                        today = datetime.now().strftime("%Y-%m-%d")
+                        if f"{roll}|{today}" not in marked_today:
+                            with open(ATTENDANCE_CSV, "a", newline="") as f:
+                                writer = csv.writer(f)
+                                writer.writerow([name, roll, today, datetime.now().strftime("%H:%M:%S")])
+                            marked_today.add(f"{roll}|{today}")
+
+                # Store detection data (scaled back up)
+                last_face_data.append({
+                    "box": (top * 2, right * 2, bottom * 2, left * 2),
+                    "label": name.upper()
+                })
+
+        # Draw all persistent face detections on EVERY frame
+        for face in last_face_data:
+            top, right, bottom, left = face["box"]
+            label = face["label"]
+            # Technical corner brackets for better aesthetic
+            d = 20
+            cv2.line(frame, (left, top), (left + d, top), (255, 255, 255), 2)
+            cv2.line(frame, (left, top), (left, top + d), (255, 255, 255), 2)
+            cv2.line(frame, (right, top), (right - d, top), (255, 255, 255), 2)
+            cv2.line(frame, (right, top), (right, top + d), (255, 255, 255), 2)
+            cv2.line(frame, (left, bottom), (left + d, bottom), (255, 255, 255), 2)
+            cv2.line(frame, (left, bottom), (left, bottom - d), (255, 255, 255), 2)
+            cv2.line(frame, (right, bottom), (right - d, bottom), (255, 255, 255), 2)
+            cv2.line(frame, (right, bottom), (right, bottom - d), (255, 255, 255), 2)
+            
+            cv2.putText(frame, f"> {label}", (left, top - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+
+        ret, buffer = cv2.imencode('.jpg', frame)
+        frame = buffer.tobytes()
+        yield (b'--frame\r\n'
+               b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
+
+@app.route("/video_feed")
+def video_feed():
+    return Flask.response_class(generate_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
+
 @app.route("/camera")
 def camera():
     """Live face-recognition test page using the browser's webcam."""
@@ -236,7 +357,7 @@ def api_mark_attendance():
 # ---------------- Entry point ----------------
 if __name__ == "__main__":
     init_db()
-    port = int(os.environ.get("PORT", 5000))
+    port = int(os.environ.get("PORT", 3000))
     # Use Waitress (production-grade, multi-threaded WSGI server) so concurrent
     # requests (e.g. parallel model downloads + /api calls) don't block each
     # other and cause proxy 502s.

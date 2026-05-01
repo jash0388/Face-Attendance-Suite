@@ -1,28 +1,32 @@
 {% extends "base.html" %}
-{% block title %}Dashboard - Face Attendance{% endblock %}
+{% block title %}DASHBOARD - Face Attendance{% endblock %}
 
 {% block content %}
-  <h1>Dashboard</h1>
-  <p class="subtitle">Quick overview of your attendance system.</p>
+  <h1>SYSTEM_OVERVIEW</h1>
+  <p class="subtitle">STATUS: ACTIVE | DATE: {{ today }}</p>
 
   <div class="stats">
     <div class="stat">
-      <div class="label">Registered Students</div>
+      <div class="label">TOTAL_STUDENTS_REGISTERED</div>
       <div class="value">{{ total_students }}</div>
     </div>
     <div class="stat">
-      <div class="label">Attendance Today ({{ today }})</div>
+      <div class="label">ATTENDANCE_COUNT_TODAY</div>
       <div class="value">{{ today_count }}</div>
     </div>
   </div>
 
   <div class="card">
-    <h2 style="margin-top:0">How to use</h2>
-    <ol>
-      <li>Go to <a href="{{ url_for('add_student') }}">Students &rarr; Add Student</a> and register a face.</li>
-      <li>Click <a href="{{ url_for('camera') }}">Test Camera</a> to try recognition right in the browser, or run <code>python main.py</code> locally for the full OpenCV version.</li>
-      <li>Open the <a href="{{ url_for('view_attendance') }}">Attendance</a> page to see records.</li>
-    </ol>
-    <a href="{{ url_for('camera') }}" class="btn btn-primary">Open Test Camera</a>
+    <h2>OPERATIONAL_GUIDE</h2>
+    <ul style="list-style: none; padding: 0;">
+      <li style="margin-bottom: 0.5rem;">[01] REGISTER_FACES: ADD STUDENT RECORDS TO DATABASE.</li>
+      <li style="margin-bottom: 0.5rem;">[02] SCAN_ENTRY: INITIALISE SCANNER (WEBCAM OR CCTV).</li>
+      <li style="margin-bottom: 0.5rem;">[03] EXPORT_LOGS: VIEW AND VERIFY ATTENDANCE RECORDS.</li>
+    </ul>
+    <div style="display: flex; gap: 1rem; margin-top: 1.5rem; flex-wrap: wrap; justify-content: center;">
+      <a href="{{ url_for('camera') }}" class="btn">INITIALISE_SCANNER</a>
+      <a href="{{ url_for('add_student') }}" class="btn">ADD_NEW_RECORD</a>
+    </div>
   </div>
 {% endblock %}
+

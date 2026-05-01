@@ -1,31 +1,118 @@
 {% extends "base.html" %}
-{% block title %}Add Student - Face Attendance{% endblock %}
+{% block title %}NEW_RECORD - Face Attendance{% endblock %}
 
 {% block content %}
-  <h1>Add Student</h1>
-  <p class="subtitle">Register a new student and upload a clear, front-facing photo.</p>
+  <h1>ADD_NEW_RECORD</h1>
+  <p class="subtitle">INITIALISE_DATABASE_ENTRY: STUDENT_PROFILE</p>
 
-  <div class="card" style="max-width:520px">
-    <form method="POST" enctype="multipart/form-data">
+  <div class="card" style="max-width:560px">
+    <form id="add-student-form" method="POST" enctype="multipart/form-data">
       <div class="field">
-        <label for="name">Full Name</label>
-        <input type="text" id="name" name="name" required placeholder="e.g. Aditi Sharma">
+        <label for="name">NAME_STRING</label>
+        <input type="text" id="name" name="name" required placeholder="E.G. JOHN_DOE">
       </div>
 
       <div class="field">
-        <label for="roll_number">Roll Number</label>
-        <input type="text" id="roll_number" name="roll_number" required placeholder="e.g. 22BTCS101">
+        <label for="roll_number">ROLL_CODE</label>
+        <input type="text" id="roll_number" name="roll_number" required placeholder="E.G. BTCS101">
       </div>
 
       <div class="field">
-        <label for="image">Face Image (PNG / JPG)</label>
-        <input type="file" id="image" name="image" accept="image/png,image/jpeg" required>
+        <label>INPUT_METHOD</label>
+        <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
+          <button type="button" class="btn" id="tab-upload" onclick="switchTab('upload')">UPLOAD_FILE</button>
+          <button type="button" class="btn" id="tab-webcam" onclick="switchTab('webcam')">WEBCAM_CAPTURE</button>
+        </div>
+
+        <div id="mode-upload">
+          <input type="file" id="image" name="image" accept="image/png,image/jpeg">
+        </div>
+
+        <div id="mode-webcam" style="display:none;">
+          <video id="webcam-preview" autoplay muted playsinline style="width:100%; border:1px solid var(--border); filter: grayscale(100%);"></video>
+          <canvas id="webcam-canvas" style="display:none;"></canvas>
+          <div style="margin-top: 1rem; display: flex; gap: 0.5rem;">
+            <button type="button" class="btn" id="btn-start-cam" onclick="startWebcam()">START_CAM</button>
+            <button type="button" class="btn" id="btn-capture" onclick="capturePhoto()" style="display:none;">CAPTURE</button>
+            <button type="button" class="btn" id="btn-retake" onclick="retakePhoto()" style="display:none;">RETAKE</button>
+          </div>
+          <div id="capture-status" style="margin-top:0.5rem; font-size:0.75rem; text-transform:uppercase;"></div>
+        </div>
       </div>
 
-      <div style="display:flex; gap:0.75rem; margin-top:1rem;">
-        <button type="submit" class="btn btn-primary">Save Student</button>
-        <a href="{{ url_for('list_students') }}" class="btn btn-link">Cancel</a>
+      <div style="display:flex; gap:1rem; margin-top:2rem;">
+        <button type="submit" class="btn" id="btn-submit">SAVE_RECORD</button>
+        <a href="{{ url_for('list_students') }}" class="btn">CANCEL</a>
       </div>
     </form>
   </div>
+
+  <script>
+    let webcamStream = null;
+    let capturedBlob = null;
+
+    function switchTab(mode) {
+      document.getElementById('mode-upload').style.display = mode === 'upload' ? '' : 'none';
+      document.getElementById('mode-webcam').style.display = mode === 'webcam' ? '' : 'none';
+      if (mode === 'upload') { stopWebcam(); capturedBlob = null; }
+    }
+
+    async function startWebcam() {
+      const video = document.getElementById('webcam-preview');
+      const statusEl = document.getElementById('capture-status');
+      try {
+        webcamStream = await navigator.mediaDevices.getUserMedia({ video: true });
+        video.srcObject = webcamStream;
+        await video.play();
+        document.getElementById('btn-start-cam').style.display = 'none';
+        document.getElementById('btn-capture').style.display = 'inline-block';
+        statusEl.textContent = 'CAMERA_READY: POSITION_FACE';
+      } catch (err) {
+        statusEl.textContent = 'ERROR: ' + err.message;
+      }
+    }
+
+    function capturePhoto() {
+      const video = document.getElementById('webcam-preview');
+      const canvas = document.getElementById('webcam-canvas');
+      const statusEl = document.getElementById('capture-status');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      canvas.getContext('2d').drawImage(video, 0, 0);
+      stopWebcam();
+      video.srcObject = null;
+      video.poster = canvas.toDataURL('image/jpeg');
+      canvas.toBlob(blob => {
+        capturedBlob = blob;
+        statusEl.textContent = 'IMAGE_CAPTURED: READY_TO_SAVE';
+        document.getElementById('btn-capture').style.display = 'none';
+        document.getElementById('btn-retake').style.display = 'inline-block';
+      }, 'image/jpeg');
+    }
+
+    function retakePhoto() {
+      capturedBlob = null;
+      document.getElementById('btn-retake').style.display = 'none';
+      startWebcam();
+    }
+
+    function stopWebcam() {
+      if (webcamStream) { webcamStream.getTracks().forEach(t => t.stop()); webcamStream = null; }
+    }
+
+    document.getElementById('add-student-form').addEventListener('submit', function(e) {
+      if (document.getElementById('mode-webcam').style.display !== 'none') {
+        if (!capturedBlob) { e.preventDefault(); alert('CAPTURE_IMAGE_REQUIRED'); return; }
+        e.preventDefault();
+        const formData = new FormData(this);
+        formData.delete('image');
+        formData.append('image', capturedBlob, (formData.get('roll_number') || 'capture') + '.jpg');
+        fetch(this.action || window.location.href, { method: 'POST', body: formData })
+          .then(res => { window.location.href = res.redirected ? res.url : '{{ url_for("list_students") }}'; });
+      }
+    });
+
+    window.addEventListener('beforeunload', stopWebcam);
+  </script>
 {% endblock %}
+
