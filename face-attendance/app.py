@@ -127,12 +127,16 @@ def add_student():
         save_path = os.path.join(STUDENTS_DIR, filename)
 
         try:
-            # Calculate encoding before saving
+            # 1. SAVE THE FILE FIRST
+            file.save(save_path)
+
+            # 2. CALCULATE ENCODING FROM SAVED FILE
             import face_recognition
             img = face_recognition.load_image_file(save_path)
             face_encs = face_recognition.face_encodings(img)
             encoding_blob = face_encs[0].tobytes() if face_encs else None
 
+            # 3. SAVE TO DATABASE
             with get_db() as conn:
                 conn.execute(
                     """
@@ -143,15 +147,19 @@ def add_student():
                 )
                 conn.commit()
             
-            # Update live encodings
+            # 4. UPDATE LIVE SYSTEM
             reload_encodings()
+            flash(f"Student '{name}' registered successfully.", "success")
+            return redirect(url_for("list_students"))
+
         except sqlite3.IntegrityError:
+            if os.path.exists(save_path): os.remove(save_path) # Cleanup
             flash(f"A student with roll number '{roll}' already exists.", "error")
             return redirect(url_for("add_student"))
-
-        file.save(save_path)
-        flash(f"Student '{name}' added successfully.", "success")
-        return redirect(url_for("list_students"))
+        except Exception as e:
+            if os.path.exists(save_path): os.remove(save_path) # Cleanup
+            flash(f"Error saving student: {str(e)}", "error")
+            return redirect(url_for("add_student"))
 
     return render_template("add_student.html")
 
