@@ -133,10 +133,22 @@ def add_student():
             # 1. SAVE THE FILE FIRST
             file.save(save_path)
 
-            # 2. CALCULATE ENCODING FROM SAVED FILE
-            print(f">>> ENCODING FACE FOR: {name}")
+            # 2. RESIZE IMAGE FOR FASTER ENCODING
+            print(f">>> OPTIMIZING IMAGE FOR: {name}")
+            from PIL import Image
+            with Image.open(save_path) as pil_img:
+                # Convert to RGB if necessary
+                if pil_img.mode != 'RGB':
+                    pil_img = pil_img.convert('RGB')
+                # Resize to max 800px width/height while maintaining aspect ratio
+                pil_img.thumbnail((800, 800), Image.LANCZOS)
+                pil_img.save(save_path, "JPEG", quality=85)
+
+            # 3. CALCULATE ENCODING
+            print(f">>> ENCODING FACE...")
             img = face_recognition.load_image_file(save_path)
-            face_encs = face_recognition.face_encodings(img)
+            # Use 'hog' model for speed (default), but ensure it scans the whole image
+            face_encs = face_recognition.face_encodings(img, num_jitters=1)
             encoding_blob = face_encs[0].tobytes() if face_encs else None
             print(f">>> ENCODING COMPLETE. FOUND: {len(face_encs)} FACE(S)")
 
@@ -260,21 +272,25 @@ def generate_frames():
             break
         
         frame_count += 1
-        # Only perform face recognition every 5th frame to save CPU
-        if frame_count % 5 == 0:
+        # Perform face recognition every 3rd frame (faster than 5th, but still saves CPU)
+        if frame_count % 3 == 0:
             last_face_data = []
+            # Use 0.5 scale for detection (balance between speed and accuracy)
             small_frame = cv2.resize(frame, (0, 0), fx=0.5, fy=0.5)
             rgb_small = cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB)
             
-            face_locations = face_recognition.face_locations(rgb_small)
-            face_encodings = face_recognition.face_encodings(rgb_small, face_locations)
+            # Find all face locations and encodings in the current frame
+            # 'hog' is faster on CPU, 'cnn' is for GPU (Railway is CPU only)
+            face_locs = face_recognition.face_locations(rgb_small, model="hog")
+            face_encs = face_recognition.face_encodings(rgb_small, face_locs)
             
-            for (top, right, bottom, left), face_enc in zip(face_locations, face_encodings):
+            for (top, right, bottom, left), face_enc in zip(face_locs, face_encs):
                 name, roll = "Unknown", ""
                 if known_encodings:
+                    # Compare face with ALL known students at once
                     distances = face_recognition.face_distance(known_encodings, face_enc)
                     best_idx = int(np.argmin(distances))
-                    if distances[best_idx] <= 0.58:
+                    if distances[best_idx] <= 0.55: # Slightly stricter for multi-face accuracy
                         name, roll = known_labels[best_idx].split("|")
                         today = datetime.now().strftime("%Y-%m-%d")
                         if f"{roll}|{today}" not in marked_today:
@@ -283,7 +299,7 @@ def generate_frames():
                                 writer.writerow([name, roll, today, datetime.now().strftime("%H:%M:%S")])
                             marked_today.add(f"{roll}|{today}")
 
-                # Store detection data (scaled back up)
+                # Store detection data (scaled back up by 2x)
                 last_face_data.append({
                     "box": (top * 2, right * 2, bottom * 2, left * 2),
                     "label": name.upper()
