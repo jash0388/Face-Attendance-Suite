@@ -2,7 +2,6 @@
 {% block title %}FACE ID ENROLLMENT - Face Attendance{% endblock %}
 
 {% block content %}
-<!-- Load Face-API.js from CDN for browser-side detection -->
 <script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
 
 <div class="container" style="max-width: 600px;">
@@ -10,18 +9,15 @@
     <p class="subtitle">System will automatically detect you. Place your face in the oval.</p>
 
     <div class="card" style="text-align: center; padding: 2.5rem; position: relative; overflow: hidden;">
-        <!-- Scanning Effect -->
         <div id="scan-line" style="position: absolute; top: 0; left: 0; width: 100%; height: 2px; background: var(--primary); opacity: 0; z-index: 5; pointer-events: none;"></div>
 
-        <div id="enrollment-ui" style="position: relative; width: 340px; height: 340px; margin: 0 auto 2rem; border-radius: 50%; border: 6px solid #1e293b; overflow: hidden; background: #000; box-shadow: 0 0 30px rgba(0,0,0,0.2); transition: border-color 0.4s;">
-            <video id="video" width="340" height="340" autoplay playsinline style="object-fit: cover; transform: scaleX(-1);"></video>
+        <div id="enrollment-ui" style="position: relative; width: 340px; height: 340px; margin: 0 auto 2rem; border-radius: 50%; border: 6px solid #1e293b; overflow: hidden; background: #000; box-shadow: 0 0 30px rgba(0,0,0,0.2);">
+            <video id="video" width="340" height="340" autoplay playsinline muted style="object-fit: cover; transform: scaleX(-1);"></video>
             
-            <!-- Face-ID Oval -->
             <div id="oval-overlay" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 200px; height: 260px; border: 3px solid rgba(255,255,255,0.2); border-radius: 50%; box-shadow: 0 0 0 1000px rgba(15, 23, 42, 0.7); pointer-events: none; transition: all 0.4s ease;">
                 <div id="oval-glow" style="position: absolute; inset: -3px; border-radius: 50%; border: 3px solid transparent; transition: all 0.4s;"></div>
             </div>
             
-            <!-- Progress Ring -->
             <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;">
                 <svg width="340" height="340" style="transform: rotate(-90deg);">
                     <circle cx="170" cy="170" r="165" fill="transparent" stroke="#1e293b" stroke-width="10"></circle>
@@ -31,19 +27,19 @@
         </div>
 
         <div id="instruction-box" style="margin-bottom: 2rem;">
-            <div id="status-msg" style="font-weight: 700; font-size: 1.25rem; color: var(--text); margin-bottom: 0.5rem;">Initializing...</div>
-            <div id="sub-msg" style="font-size: 0.9rem; color: var(--text-secondary);">Please wait a moment</div>
+            <div id="status-msg" style="font-weight: 700; font-size: 1.25rem; color: var(--text); margin-bottom: 0.5rem;">Connecting...</div>
+            <div id="sub-msg" style="font-size: 0.9rem; color: var(--text-secondary);">Initializing System</div>
         </div>
 
         <form id="enrollment-form" action="{{ url_for('add_student') }}" method="POST" enctype="multipart/form-data">
             <div style="display: flex; gap: 1rem; margin-bottom: 1.5rem;">
                 <div style="flex: 1; text-align: left;">
-                    <label style="display: block; font-size: 0.7rem; font-weight: 800; color: var(--primary); text-transform: uppercase; margin-bottom: 0.5rem; letter-spacing: 1px;">Full Name</label>
-                    <input type="text" name="name" id="student_name" required placeholder="Student Name" style="width: 100%; padding: 1rem; border: 2px solid var(--border); border-radius: var(--radius); outline: none; font-size: 1rem; transition: border-color 0.2s;">
+                    <label style="display: block; font-size: 0.7rem; font-weight: 800; color: var(--primary); text-transform: uppercase; margin-bottom: 0.5rem;">Full Name</label>
+                    <input type="text" name="name" id="student_name" required placeholder="Student Name" style="width: 100%; padding: 1rem; border: 2px solid var(--border); border-radius: var(--radius); outline: none;">
                 </div>
                 <div style="flex: 1; text-align: left;">
-                    <label style="display: block; font-size: 0.7rem; font-weight: 800; color: var(--primary); text-transform: uppercase; margin-bottom: 0.5rem; letter-spacing: 1px;">Roll Number</label>
-                    <input type="text" name="roll_number" id="roll_number" required placeholder="e.g. 24N81A6758" style="width: 100%; padding: 1rem; border: 2px solid var(--border); border-radius: var(--radius); outline: none; font-size: 1rem;">
+                    <label style="display: block; font-size: 0.7rem; font-weight: 800; color: var(--primary); text-transform: uppercase; margin-bottom: 0.5rem;">Roll Number</label>
+                    <input type="text" name="roll_number" id="roll_number" required placeholder="e.g. 24N81A" style="width: 100%; padding: 1rem; border: 2px solid var(--border); border-radius: var(--radius); outline: none;">
                 </div>
             </div>
 
@@ -51,7 +47,7 @@
             <input type="file" name="image_left" id="input_left" style="display:none;">
             <input type="file" name="image_right" id="input_right" style="display:none;">
 
-            <button type="submit" id="submit-btn" class="btn" style="width: 100%; padding: 1.25rem; font-size: 1.1rem; display: none; background: var(--success); box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);">Register Student Profile</button>
+            <button type="submit" id="submit-btn" class="btn" style="width: 100%; padding: 1.25rem; display: none; background: var(--success);">Register Student Profile</button>
         </form>
     </div>
 </div>
@@ -70,51 +66,50 @@
     let isEnrolled = false;
     let sequenceStarted = false;
     let modelsLoaded = false;
+    let hasError = false;
 
-    async function loadModels() {
+    async function startSystem() {
+        // Start camera first
         try {
-            // Using the most stable official CDN
-            const MODEL_URL = 'https://vladmandic.github.io/face-api/model/';
-            
-            initCamera();
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            video.srcObject = stream;
+            statusMsg.innerText = "Camera Active";
+        } catch (err) {
+            hasError = true;
+            statusMsg.innerText = "Camera Error";
+            statusMsg.style.color = "var(--danger)";
+            subMsg.innerText = "Please allow camera access and refresh.";
+            return;
+        }
 
+        // Load Models
+        try {
+            subMsg.innerText = "Loading AI models...";
+            const MODEL_URL = 'https://vladmandic.github.io/face-api/model/';
             await Promise.all([
                 faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
                 faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL)
             ]);
-            
             modelsLoaded = true;
             statusMsg.innerText = "System Ready";
             statusMsg.style.color = "var(--success)";
-            subMsg.innerText = "AI Online. Please position your face.";
-        } catch (err) {
-            console.error("Model Load Error:", err);
-            statusMsg.innerText = "System Error";
-            subMsg.innerText = "Failed to load detection models. Please refresh.";
-            statusMsg.style.color = "var(--danger)";
-        }
-    }
-
-    async function initCamera() {
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 640 } });
-            video.srcObject = stream;
-            statusMsg.innerText = "Initializing Camera...";
+            subMsg.innerText = "Please position your face in the oval.";
             detectFace();
         } catch (err) {
-            statusMsg.innerText = "Camera Access Denied";
+            hasError = true;
+            statusMsg.innerText = "AI Error";
             statusMsg.style.color = "var(--danger)";
+            subMsg.innerText = "Failed to load models. Try refreshing.";
         }
     }
 
     async function detectFace() {
-        if (sequenceStarted || isEnrolled) return;
+        if (sequenceStarted || isEnrolled || hasError) return;
 
         const detections = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 160, scoreThreshold: 0.4 }));
         
         if (detections) {
             const box = detections.box;
-            // Loosened constraints for faster lock
             if (box.width > 120) {
                 ovalGlow.style.borderColor = "var(--success)";
                 oval.style.borderColor = "var(--success)";
@@ -133,7 +128,6 @@
             ovalGlow.style.borderColor = "transparent";
             subMsg.innerText = "Searching for face...";
         }
-
         requestAnimationFrame(detectFace);
     }
 
@@ -142,38 +136,28 @@
         statusMsg.innerText = "Face Locked!";
         subMsg.innerText = "Starting Enrollment...";
         
-        // Front
-        await runStep("Front", "Look straight ahead", 33, 'front');
-        // Left
-        await runStep("Left Profile", "Turn your head to the LEFT", 66, 'left');
-        // Right
-        await runStep("Right Profile", "Turn your head to the RIGHT", 100, 'right');
+        await runStep("Front View", "Look straight ahead", 33, 'front');
+        await runStep("Left View", "Turn your head to the LEFT", 66, 'left');
+        await runStep("Right View", "Turn your head to the RIGHT", 100, 'right');
 
         statusMsg.innerText = "Enrollment Complete!";
-        subMsg.innerText = "Check your angles and click Register";
-        statusMsg.style.color = "var(--success)";
+        subMsg.innerText = "Click the button below to save";
         submitBtn.style.display = "block";
     }
 
     async function runStep(title, instruction, progress, angle) {
         statusMsg.innerText = title;
         subMsg.innerText = instruction;
-        
-        // Visual Scan Effect
         scanLine.style.opacity = "1";
-        scanLine.style.top = "0%";
         await animateScan();
-        
         captureImage(angle);
         progressCircle.style.strokeDashoffset = dashArray - (progress / 100 * dashArray);
-        await new Promise(r => setTimeout(r, 1000));
+        await new Promise(r => setTimeout(r, 800));
     }
 
     function animateScan() {
         return new Promise(resolve => {
-            scanLine.animate([
-                { top: '0%' }, { top: '100%' }
-            ], { duration: 1500, iterations: 1 }).onfinish = resolve;
+            scanLine.animate([{ top: '0%' }, { top: '100%' }], { duration: 1200, iterations: 1 }).onfinish = resolve;
         });
     }
 
@@ -183,7 +167,6 @@
         const ctx = canvas.getContext('2d');
         ctx.translate(canvas.width, 0); ctx.scale(-1, 1);
         ctx.drawImage(video, 0, 0, 640, 640);
-        
         canvas.toBlob((blob) => {
             const file = new File([blob], `shot_${angle}.jpg`, { type: "image/jpeg" });
             const dt = new DataTransfer();
@@ -192,6 +175,6 @@
         }, 'image/jpeg', 0.8);
     }
 
-    loadModels();
+    startSystem();
 </script>
 {% endblock %}
