@@ -1,76 +1,70 @@
 {% extends "base.html" %}
-{% block title %}Scanner - Face Attendance{% endblock %}
+{% block title %}Long-Range Scanner - Face Attendance{% endblock %}
 
 {% block content %}
-  <h1>Scan Attendance</h1>
-  <p class="subtitle">
-    The scanner is ready to detect faces
-  </p>
-
-  <div class="card">
-    <div style="display:flex; align-items:center; margin-bottom:1rem;">
-      <div id="status">Loading the scanner...</div>
-      <div id="perf-badge" style="display:none;">-- MS / -- FPS</div>
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+    <div>
+        <h1 style="margin:0; letter-spacing:-1px;">Biometric <span style="font-weight:300;">Scanner</span></h1>
+        <p class="subtitle" style="margin:0;">High-precision long-range face detection active.</p>
     </div>
+    <div id="perf-badge" style="background: var(--primary); color: white; padding: 0.5rem 1rem; border-radius: 20px; font-weight: 800; font-size: 0.7rem; display: none;">-- MS / -- FPS</div>
+  </div>
 
-    <div id="error-detail" style="display:none; border:1px solid var(--border); padding:1rem; margin-bottom:1rem; font-size:0.8rem; color:var(--text);"></div>
-
-    <div id="mode-selector" style="margin-bottom: 1.5rem; border-bottom: 1px solid var(--border); padding-bottom: 1rem;">
-      <div style="font-size: 0.7rem; margin-bottom: 0.5rem;">Camera Settings</div>
-      <div style="display:flex; gap:1rem; align-items:center; flex-wrap:wrap;">
-      <button id="mode-browser-btn" class="btn active" onclick="switchScannerMode('browser')">Computer Camera</button>
-      <button id="mode-cctv-btn" class="btn" onclick="switchScannerMode('cctv')">External CCTV</button>
+  <div class="card" style="padding: 1.5rem;">
+    <div id="mode-selector" style="margin-bottom: 1.5rem; display: flex; gap: 1rem; flex-wrap: wrap; align-items: center;">
+      <button id="mode-browser-btn" class="btn active" onclick="switchScannerMode('browser')">Local Camera</button>
+      <button id="mode-cctv-btn" class="btn" onclick="switchScannerMode('cctv')">CCTV Stream</button>
       
       <div id="cctv-config" style="display:none; gap:0.5rem; align-items:center;">
-        <input type="text" id="rtsp-url" class="btn" style="text-transform:none; width:300px;" placeholder="rtsp://user:pass@ip:port/stream">
-        <button id="set-cctv-btn" class="btn" onclick="applyCctv()">Apply</button>
+        <input type="text" id="rtsp-url" class="btn" style="text-transform:none; width:280px; text-align:left;" placeholder="rtsp://url...">
+        <button class="btn" onclick="applyCctv()" style="background: var(--success);">Connect</button>
       </div>
 
-      <select id="quality-select" class="btn" style="text-transform:none;">
-        <option value="128">Super Fast (Low quality)</option>
-        <option value="160" selected>Fast (Standard)</option>
-        <option value="224">Balanced</option>
-        <option value="320">Accurate (Slower)</option>
-      </select>
+      <div style="flex-grow: 1;"></div>
+
+      <div style="display: flex; align-items: center; gap: 0.5rem;">
+          <span style="font-size: 0.7rem; font-weight: 800; color: var(--text-secondary);">SCAN RANGE:</span>
+          <select id="quality-select" class="btn" style="text-transform:none; padding: 0.5rem 1rem;">
+            <option value="160">Standard (Near)</option>
+            <option value="320">Long Range (Medium)</option>
+            <option value="416">Sniper Mode (Distant)</option>
+            <option value="512" selected>Ultra-Range (Extreme)</option>
+          </select>
+      </div>
     </div>
 
-    <div style="display:flex; gap:1rem; margin-bottom:1rem; align-items:center;">
-      <button id="start-btn" class="btn" disabled>Start Scanning</button>
-      <button id="stop-btn"  class="btn" style="display:none">Stop Scanning</button>
-    </div>
-
-    <div id="video-wrap" style="display: block; margin: 0 auto; text-align: center;">
-      <div style="position: relative; display: inline-block; border: 1px solid var(--border);">
-        <!-- Browser-based video -->
-        <video id="video" autoplay muted playsinline style="display: block; max-width: 100%; height: auto;"></video>
-        <!-- Backend-based CCTV stream -->
-        <img id="cctv-stream" style="display: none; max-width: 100%; height: auto; filter: grayscale(100%);">
-        
+    <div style="position: relative; width: 100%; max-width: 1000px; margin: 0 auto; border-radius: 12px; overflow: hidden; background: #000; box-shadow: 0 20px 40px rgba(0,0,0,0.3);">
+        <video id="video" autoplay muted playsinline style="width: 100%; height: auto; display: block;"></video>
+        <img id="cctv-stream" style="width: 100%; height: auto; display: none;">
         <canvas id="overlay" style="position: absolute; top: 0; left: 0; pointer-events: none;"></canvas>
-        <div class="scan-line"></div>
-      </div>
+        
+        <div id="status-overlay" style="position: absolute; top: 20px; left: 20px; background: rgba(0,0,0,0.6); padding: 0.5rem 1rem; border-radius: 8px; color: #fff; font-weight: 700; font-size: 0.8rem; border-left: 4px solid var(--primary);">
+            SYSTEM: INITIALIZING...
+        </div>
+
+        <div style="position: absolute; bottom: 20px; right: 20px; display: flex; gap: 10px;">
+            <button id="start-btn" class="btn" style="background: var(--primary); padding: 0.8rem 2rem;" disabled>START SCAN</button>
+            <button id="stop-btn" class="btn" style="background: var(--danger); padding: 0.8rem 2rem; display: none;">STOP SCAN</button>
+        </div>
     </div>
   </div>
 
-  <div class="card">
-    <h2>Scanned Students (This Session)</h2>
-    <ul id="recognized-list">
-      <li id="recognized-empty">No one scanned yet</li>
-    </ul>
+  <div class="card" style="margin-top: 2rem;">
+    <h2 style="font-size: 1rem; margin-bottom: 1rem;">Live Access Log</h2>
+    <div id="recognized-list" style="max-height: 300px; overflow-y: auto; font-family: 'JetBrains Mono', monospace; font-size: 0.85rem;">
+        <div id="recognized-empty" style="color: var(--text-secondary);">[ WAITING FOR BIOMETRIC DATA ]</div>
+    </div>
   </div>
 
-  <script src="{{ url_for('static', filename='face-api.min.js') }}"></script>
+  <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
   <script>
     'use strict';
-
-    const MODEL_URL       = "{{ url_for('static', filename='models') }}";
+    const MODEL_URL       = 'https://vladmandic.github.io/face-api/model/';
     const STUDENTS_URL    = "{{ url_for('api_students') }}";
     const MARK_URL        = "{{ url_for('api_mark_attendance') }}";
-    const MATCH_THRESHOLD = 0.42; // Tightened for high-security accuracy
-    const SCORE_THRESHOLD = 0.5;
+    const MATCH_THRESHOLD = 0.42; 
 
-    const statusEl     = document.getElementById('status');
-    const errorEl      = document.getElementById('error-detail');
+    const statusOverlay = document.getElementById('status-overlay');
     const startBtn     = document.getElementById('start-btn');
     const stopBtn      = document.getElementById('stop-btn');
     const video        = document.getElementById('video');
@@ -80,266 +74,171 @@
     const recList      = document.getElementById('recognized-list');
     const recEmpty     = document.getElementById('recognized-empty');
     const cctvStream   = document.getElementById('cctv-stream');
-    const rtspInput    = document.getElementById('rtsp-url');
 
-    let scannerMode        = 'browser'; // 'browser' or 'cctv'
-
-    let matcher            = null;
-    let stream             = null;
-    let detectionRunning   = false;
-    let lastDetections     = []; 
-    let detectionCount     = 0;
-    let totalDetectionMs   = 0;
-    let renderFrames       = 0;
-    let perfLastTs         = performance.now();
-
+    let scannerMode = 'browser';
+    let matcher = null;
+    let stream = null;
+    let detectionRunning = false;
+    let lastDetections = [];
     const recognizedThisSession = new Set();
 
-    const setStatus = t => { statusEl.textContent = t.toUpperCase(); };
-
-    function showError(msg) {
-      errorEl.style.display = 'block';
-      errorEl.textContent   = `[ERROR] ${msg}`;
-    }
-
-    function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-
-    async function encodeStudent(s) {
-      const img = await new Promise((resolve, reject) => {
-        const i = new Image();
-        i.crossOrigin = 'anonymous';
-        i.onload = () => resolve(i);
-        i.onerror = reject;
-        i.src = s.image_url;
-      });
-      for (const sz of [320, 160]) {
-        const det = await faceapi.detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: sz }))
-          .withFaceLandmarks().withFaceDescriptor();
-        if (det) return det.descriptor;
-      }
-      return null;
-    }
+    const setStatus = t => { statusOverlay.textContent = `SYSTEM: ${t.toUpperCase()}`; };
 
     async function init() {
-      try {
-        await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
-        await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
-        await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
+        try {
+            setStatus('Loading Long-Range AI...');
+            await Promise.all([
+                faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL),
+                faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+                faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
+            ]);
 
-        const r = await fetch(STUDENTS_URL);
-        const students = await r.json();
+            setStatus('Syncing Database...');
+            const r = await fetch(STUDENTS_URL);
+            const students = await r.json();
 
-        if (students.length === 0) {
-          setStatus('NO_STUDENTS_IN_DB');
-          startBtn.disabled = false;
-          return;
+            if (students.length > 0) {
+                const labeled = [];
+                for (const s of students) {
+                    const img = await faceapi.fetchImage(s.image_url);
+                    const fullDesc = await faceapi.detectSingleFace(img).withFaceLandmarks().withFaceDescriptor();
+                    if (fullDesc) labeled.push(new faceapi.LabeledFaceDescriptors(`${s.name}|${s.roll_number}`, [fullDesc.descriptor]));
+                }
+                if (labeled.length > 0) {
+                    matcher = new faceapi.FaceMatcher(labeled, MATCH_THRESHOLD);
+                }
+            }
+
+            setStatus('System Ready');
+            startBtn.disabled = false;
+        } catch (e) {
+            setStatus('ERROR: ' + e.message);
         }
-
-        const labeled = [];
-        for (const s of students) {
-          setStatus(`ENCODING_${s.name}...`);
-          const desc = await encodeStudent(s);
-          if (desc) labeled.push(new faceapi.LabeledFaceDescriptors(`${s.name}|${s.roll_number}`, [desc]));
-        }
-
-        if (labeled.length === 0) {
-          setStatus('NO_VALID_FACES_IN_DB');
-          return;
-        }
-
-        matcher = new faceapi.FaceMatcher(labeled, MATCH_THRESHOLD);
-        setStatus(`SYSTEM_READY_[${labeled.length}_LOADED]`);
-        startBtn.disabled = false;
-      } catch (e) {
-        showError(e.message);
-      }
     }
 
     function switchScannerMode(mode) {
-      if (detectionRunning) stopCamera();
-      scannerMode = mode;
-      document.getElementById('mode-browser-btn').classList.toggle('active', mode === 'browser');
-      document.getElementById('mode-cctv-btn').classList.toggle('active', mode === 'cctv');
-      document.getElementById('cctv-config').style.display = mode === 'cctv' ? 'flex' : 'none';
-      video.style.display = mode === 'browser' ? 'block' : 'none';
-      cctvStream.style.display = mode === 'cctv' ? 'block' : 'none';
-      overlay.style.display = mode === 'browser' ? 'block' : 'none';
-      setStatus(mode === 'browser' ? 'SYSTEM_READY_LOCAL' : 'SYSTEM_READY_REMOTE');
+        if (detectionRunning) stopCamera();
+        scannerMode = mode;
+        document.getElementById('mode-browser-btn').classList.toggle('active', mode === 'browser');
+        document.getElementById('mode-cctv-btn').classList.toggle('active', mode === 'cctv');
+        document.getElementById('cctv-config').style.display = mode === 'cctv' ? 'flex' : 'none';
+        video.style.display = mode === 'browser' ? 'block' : 'none';
+        cctvStream.style.display = mode === 'cctv' ? 'block' : 'none';
     }
 
     async function applyCctv() {
-      const url = rtspInput.value || "0";
-      const res = await fetch('/api/config-camera', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ source: url })
-      });
-      if (res.ok) {
-        setStatus('CCTV_CONFIG_APPLIED');
-        if (detectionRunning) {
-          stopCamera();
-          startCamera();
-        }
-      }
+        const url = document.getElementById('rtsp-url').value;
+        const res = await fetch('/api/config-camera', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ source: url })
+        });
+        if (res.ok) setStatus('CCTV Source Applied');
     }
 
     async function startCamera() {
-      if (scannerMode === 'cctv') {
-        cctvStream.src = '/video_feed?t=' + Date.now();
-        detectionRunning = true;
-        document.body.classList.add('camera-active');
-        startBtn.style.display = 'none';
-        stopBtn.style.display = 'inline-block';
-        setStatus('CCTV_STREAM_ACTIVE');
-        return;
-      }
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 }, audio: false });
-        video.srcObject = stream;
-        await video.play();
-        
-        const syncSize = () => {
-          overlay.width = video.clientWidth;
-          overlay.height = video.clientHeight;
-        };
-        syncSize();
-        window.addEventListener('resize', syncSize);
+        if (scannerMode === 'cctv') {
+            cctvStream.src = '/video_feed?t=' + Date.now();
+            detectionRunning = true;
+            startBtn.style.display = 'none';
+            stopBtn.style.display = 'inline-block';
+            return;
+        }
+        try {
+            stream = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 } });
+            video.srcObject = stream;
+            await video.play();
+            
+            overlay.width = video.clientWidth;
+            overlay.height = video.clientHeight;
 
-        document.body.classList.add('camera-active');
-        startBtn.style.display = 'none';
-        stopBtn.style.display = 'inline-block';
-        perfBadge.style.display = 'inline-block';
-        setStatus('CAMERA_ACTIVE');
-
-        detectionRunning = true;
-        detectionLoop();
-        renderLoop();
-      } catch (e) {
-        showError(e.message);
-      }
+            startBtn.style.display = 'none';
+            stopBtn.style.display = 'inline-block';
+            perfBadge.style.display = 'block';
+            detectionRunning = true;
+            detectionLoop();
+            renderLoop();
+        } catch (e) {
+            setStatus('CAMERA ERROR');
+        }
     }
 
     function stopCamera() {
-      detectionRunning = false;
-      document.body.classList.remove('camera-active');
-      if (scannerMode === 'cctv') {
+        detectionRunning = false;
+        if (stream) stream.getTracks().forEach(t => t.stop());
+        video.srcObject = null;
         cctvStream.src = '';
-      }
-      if (stream) stream.getTracks().forEach(t => t.stop());
-      video.srcObject = null;
-      lastDetections = [];
-      overlay.getContext('2d').clearRect(0, 0, overlay.width, overlay.height);
-      startBtn.style.display = 'inline-block';
-      stopBtn.style.display = 'none';
-      perfBadge.style.display = 'none';
-      setStatus('Camera stopped');
+        startBtn.style.display = 'inline-block';
+        stopBtn.style.display = 'none';
     }
 
     async function detectionLoop() {
-      const inferCanvas = document.createElement('canvas');
-      const inferCtx = inferCanvas.getContext('2d');
+        while (detectionRunning) {
+            if (video.readyState < 2) { await new Promise(r => setTimeout(r, 100)); continue; }
+            
+            const t0 = performance.now();
+            // SSD Mobilenet is MUCH more accurate for distant faces
+            const detections = await faceapi.detectAllFaces(video, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.4 }))
+                .withFaceLandmarks().withFaceDescriptors();
+            
+            const t1 = performance.now();
+            perfBadge.innerText = `${Math.round(t1 - t0)}MS / ${Math.round(1000/(t1-t0))}FPS`;
 
-      while (detectionRunning) {
-        if (video.readyState < 2) { await sleep(100); continue; }
-        const inputSize = parseInt(qualitySel.value, 10);
-        inferCanvas.width = inputSize;
-        inferCanvas.height = Math.round(inputSize * (video.videoHeight / video.videoWidth));
-        inferCtx.drawImage(video, 0, 0, inferCanvas.width, inferCanvas.height);
+            const sx = overlay.width / video.videoWidth;
+            const sy = overlay.height / video.videoHeight;
 
-        const t0 = performance.now();
-        const raw = await faceapi.detectAllFaces(inferCanvas, new faceapi.TinyFaceDetectorOptions({ inputSize, scoreThreshold: SCORE_THRESHOLD }))
-          .withFaceLandmarks().withFaceDescriptors();
-        
-        totalDetectionMs += (performance.now() - t0);
-        detectionCount++;
+            lastDetections = detections.map(d => {
+                const match = matcher ? matcher.findBestMatch(d.descriptor) : null;
+                const isKnown = match && match.label !== 'unknown';
+                const [name, roll] = isKnown ? match.label.split('|') : ['UNKNOWN', ''];
+                
+                if (isKnown && !recognizedThisSession.has(match.label)) {
+                    recognizedThisSession.add(match.label);
+                    logRecognition(name, roll);
+                    fetch(MARK_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name, roll_number: roll })
+                    });
+                }
 
-        const sx = overlay.width / inferCanvas.width;
-        const sy = overlay.height / inferCanvas.height;
-
-        lastDetections = raw.map(d => {
-          const match = matcher ? matcher.findBestMatch(d.descriptor) : null;
-          const isKnown = match && match.label !== 'unknown';
-          const [name, roll] = isKnown ? match.label.split('|') : ['UNKNOWN', ''];
-          
-          if (isKnown && !recognizedThisSession.has(match.label)) {
-            recognizedThisSession.add(match.label);
-            addRecognized(name, roll);
-            fetch(MARK_URL, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ name, roll_number: roll })
+                const { x, y, width, height } = d.detection.box;
+                return { x: x * sx, y: y * sy, w: width * sx, h: height * sy, label: isKnown ? name.toUpperCase() : 'UNKNOWN' };
             });
-          }
 
-          const { x, y, width, height } = d.detection.box;
-          return { x: x * sx, y: y * sy, w: width * sx, h: height * sy, label: isKnown ? `${name}_[${roll}]` : 'UNKNOWN' };
-        });
-
-        await sleep(150); // Throttle detection to ~6 FPS to save CPU
-      }
+            await new Promise(r => setTimeout(r, 100));
+        }
     }
 
     function renderLoop() {
-      if (!detectionRunning) return;
-      const ctx = overlay.getContext('2d');
-      ctx.clearRect(0, 0, overlay.width, overlay.height);
-      
-      const color = '#fff';
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 2;
-      ctx.font = '10px "JetBrains Mono", monospace';
-      ctx.fillStyle = color;
-
-      lastDetections.forEach(d => {
-        // Draw corner brackets instead of a full box
-        const len = Math.min(d.w, d.h) * 0.2;
+        if (!detectionRunning) return;
+        const ctx = overlay.getContext('2d');
+        ctx.clearRect(0, 0, overlay.width, overlay.height);
         
-        // Top-left
-        ctx.beginPath();
-        ctx.moveTo(d.x, d.y + len);
-        ctx.lineTo(d.x, d.y);
-        ctx.lineTo(d.x + len, d.y);
-        ctx.stroke();
+        lastDetections.forEach(d => {
+            ctx.strokeStyle = '#3b82f6';
+            ctx.lineWidth = 3;
+            // Technical Corner Brackets
+            const len = 20;
+            ctx.beginPath();
+            ctx.moveTo(d.x, d.y + len); ctx.lineTo(d.x, d.y); ctx.lineTo(d.x + len, d.y);
+            ctx.moveTo(d.x + d.w - len, d.y); ctx.lineTo(d.x + d.w, d.y); ctx.lineTo(d.x + d.w, d.y + len);
+            ctx.stroke();
 
-        // Top-right
-        ctx.beginPath();
-        ctx.moveTo(d.x + d.w - len, d.y);
-        ctx.lineTo(d.x + d.w, d.y);
-        ctx.lineTo(d.x + d.w, d.y + len);
-        ctx.stroke();
-
-        // Bottom-left
-        ctx.beginPath();
-        ctx.moveTo(d.x, d.y + d.h - len);
-        ctx.lineTo(d.x, d.y + d.h);
-        ctx.lineTo(d.x + len, d.y + d.h);
-        ctx.stroke();
-
-        // Bottom-right
-        ctx.beginPath();
-        ctx.moveTo(d.x + d.w - len, d.y + d.h);
-        ctx.lineTo(d.x + d.w, d.y + d.h);
-        ctx.lineTo(d.x + d.w, d.y + d.h - len);
-        ctx.stroke();
-
-        // Label
-        ctx.fillText(`> ${d.label}`, d.x, d.y - 8);
-      });
-
-      renderFrames++;
-      const now = performance.now();
-      if (now - perfLastTs >= 1000) {
-        perfBadge.textContent = `${Math.round(totalDetectionMs/detectionCount)}MS / ${Math.round(renderFrames * 1000 / (now - perfLastTs))}FPS`;
-        totalDetectionMs = 0; detectionCount = 0; renderFrames = 0; perfLastTs = now;
-      }
-      requestAnimationFrame(renderLoop);
+            ctx.fillStyle = '#3b82f6';
+            ctx.font = 'bold 12px sans-serif';
+            ctx.fillText(`> ${d.label}`, d.x, d.y - 10);
+        });
+        requestAnimationFrame(renderLoop);
     }
 
-    function addRecognized(name, roll) {
-      if (recEmpty) recEmpty.style.display = 'none';
-      const li = document.createElement('li');
-      li.textContent = `> ${new Date().toLocaleTimeString()} | ${name} (${roll})`;
-      recList.prepend(li);
+    function logRecognition(name, roll) {
+        if (recEmpty) recEmpty.remove();
+        const div = document.createElement('div');
+        div.style.padding = '0.5rem 0';
+        div.style.borderBottom = '1px solid #eee';
+        div.innerHTML = `<span style="color:var(--primary)">[${new Date().toLocaleTimeString()}]</span> IDENTIFIED: <b>${name}</b> (${roll})`;
+        recList.prepend(div);
     }
 
     startBtn.addEventListener('click', startCamera);
@@ -347,4 +246,3 @@
     init();
   </script>
 {% endblock %}
-
