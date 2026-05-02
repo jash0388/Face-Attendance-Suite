@@ -73,28 +73,24 @@
 
     async function loadModels() {
         try {
-            // Using a more reliable CDN for models
-            const MODEL_URL = 'https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights/';
+            // Using the most stable official CDN
+            const MODEL_URL = 'https://vladmandic.github.io/face-api/model/';
             
-            // Start camera early so the user isn't staring at a black screen
             initCamera();
 
             await Promise.all([
-                faceapi.nets.tinyFaceDetector.loadFromUri('https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@master/weights/'),
-                faceapi.nets.faceLandmark68Net.loadFromUri('https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@master/weights/')
+                faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+                faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL)
             ]);
             
             modelsLoaded = true;
-            statusMsg.innerText = "System Online";
+            statusMsg.innerText = "System Ready";
             statusMsg.style.color = "var(--success)";
-            setTimeout(() => {
-                statusMsg.innerText = "Position Your Face";
-                statusMsg.style.color = "var(--text)";
-            }, 1000);
+            subMsg.innerText = "AI Online. Please position your face.";
         } catch (err) {
             console.error("Model Load Error:", err);
-            statusMsg.innerText = "System Failed to Start";
-            subMsg.innerText = "Check your internet or refresh the page";
+            statusMsg.innerText = "System Error";
+            subMsg.innerText = "Failed to load detection models. Please refresh.";
             statusMsg.style.color = "var(--danger)";
         }
     }
