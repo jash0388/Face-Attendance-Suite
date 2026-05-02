@@ -55,7 +55,55 @@ def reload_encodings():
         print(f">>> DB SYNC ERROR: {e}")
 
 @app.route("/")
-def index(): return render_template("index.html")
+def index():
+    try:
+        today = datetime.now().strftime("%Y-%m-%d")
+        students = supabase.table("students").select("id", count="exact").execute()
+        attendance = supabase.table("attendance").select("id", count="exact").eq("date", today).execute()
+        
+        return render_template("index.html", 
+                               today=today, 
+                               total_students=students.count or 0, 
+                               today_count=attendance.count or 0)
+    except Exception as e:
+        print(f"Index Error: {e}")
+        return render_template("index.html", today=datetime.now().strftime("%Y-%m-%d"), total_students=0, today_count=0)
+
+@app.route("/admin")
+def admin_dashboard():
+    try:
+        res = supabase.table("unknown_detections").select("*").order("detected_at", desc=True).limit(5).execute()
+        total = supabase.table("unknown_detections").select("id", count="exact").execute()
+        return render_template("admin_dashboard.html", recent_unknowns=res.data, total_unknowns=total.count or 0)
+    except Exception as e:
+        print(f"Admin Error: {e}")
+        return render_template("admin_dashboard.html", recent_unknowns=[], total_unknowns=0)
+
+@app.route("/admin/unknowns")
+def list_unknowns():
+    try:
+        res = supabase.table("unknown_detections").select("*").order("detected_at", desc=True).execute()
+        return render_template("unknown_detections.html", unknowns=res.data)
+    except Exception as e:
+        print(f"List Unknowns Error: {e}")
+        return render_template("unknown_detections.html", unknowns=[])
+
+@app.route("/admin/unknowns/delete/<detection_id>", methods=["POST"])
+def delete_unknown(detection_id):
+    try:
+        # Get image path first to delete from storage if needed
+        res = supabase.table("unknown_detections").select("image_path").eq("id", detection_id).execute()
+        if res.data:
+            path = res.data[0]["image_path"]
+            if "unknown_faces/" in path:
+                storage_path = path.split("unknown_faces/")[1]
+                supabase.storage.from_("face-attendance").remove([f"unknown_faces/{storage_path}"])
+        
+        supabase.table("unknown_detections").delete().eq("id", detection_id).execute()
+        flash("Log deleted.", "success")
+    except Exception as e:
+        flash(f"Delete Error: {e}", "error")
+    return redirect(url_for("list_unknowns"))
 
 @app.route("/students")
 def list_students():
@@ -104,6 +152,7 @@ def generate_frames():
     marked_today = set()
     frame_count = 0
     last_face_data = []
+    last_unknown_time = 0
 
     while True:
         success, frame = cap.read()
@@ -145,6 +194,20 @@ def generate_frames():
                                 supabase.table("attendance").insert({"name":name, "roll_number":roll, "date":today, "time":datetime.now().strftime("%H:%M:%S")}).execute()
                                 marked_today.add(f"{roll}|{today}")
                     
+                    if name == "Unknown":
+                        now = time.time()
+                        if now - last_unknown_time > 30:
+                            last_unknown_time = now
+                            try:
+                                face_img = frame[max(0, top-50):min(h, bottom+50), max(0, left-50):min(w, right+50)]
+                                if face_img.size > 0:
+                                    fname = f"unknown_{int(now)}.jpg"
+                                    _, buf = cv2.imencode(".jpg", face_img)
+                                    supabase.storage.from_("face-attendance").upload(f"unknown_faces/{fname}", buf.tobytes())
+                                    url = supabase.storage.from_("face-attendance").get_public_url(f"unknown_faces/{fname}")
+                                    supabase.table("unknown_detections").insert({"image_path": url, "detected_at": datetime.now().isoformat()}).execute()
+                            except Exception as e: print(f"Unknown Save Error: {e}")
+
                     last_face_data.append({"box": (top, right, bottom, left), "label": name.upper()})
 
         # Draw Tech-UI overlays
