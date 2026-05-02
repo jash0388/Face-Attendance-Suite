@@ -42,7 +42,7 @@
     <div id="video-wrap" style="display: block; margin: 0 auto; text-align: center;">
       <div style="position: relative; display: inline-block; border: 1px solid var(--border);">
         <!-- Browser-based video -->
-        <video id="video" autoplay muted playsinline style="display: block; max-width: 100%; height: auto; filter: grayscale(100%);"></video>
+        <video id="video" autoplay muted playsinline style="display: block; max-width: 100%; height: auto;"></video>
         <!-- Backend-based CCTV stream -->
         <img id="cctv-stream" style="display: none; max-width: 100%; height: auto; filter: grayscale(100%);">
         
@@ -66,8 +66,8 @@
     const MODEL_URL       = "{{ url_for('static', filename='models') }}";
     const STUDENTS_URL    = "{{ url_for('api_students') }}";
     const MARK_URL        = "{{ url_for('api_mark_attendance') }}";
-    const MATCH_THRESHOLD = 0.55; // Increased for better low-quality matching
-    const SCORE_THRESHOLD = 0.4;
+    const MATCH_THRESHOLD = 0.42; // Tightened for high-security accuracy
+    const SCORE_THRESHOLD = 0.5;
 
     const statusEl     = document.getElementById('status');
     const errorEl      = document.getElementById('error-detail');
