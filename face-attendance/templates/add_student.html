@@ -1,45 +1,47 @@
 {% extends "base.html" %}
-{% block title %}FACE ID ENROLLMENT - Face Attendance{% endblock %}
+{% block title %}FACE ID PRO ENROLLMENT - Face Attendance{% endblock %}
 
 {% block content %}
 <script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
 
 <div class="container" style="max-width: 600px;">
-    <h1>Face ID Enrollment</h1>
-    <p class="subtitle">Enter details and align your face in the oval.</p>
+    <h1 style="color: var(--primary); letter-spacing: -1px;">Face ID <span style="font-weight: 300;">PRO</span></h1>
+    <p class="subtitle">Enter details to begin the high-accuracy burst enrollment.</p>
 
-    <div class="card" style="text-align: center; padding: 2.5rem; position: relative; overflow: hidden;">
-        <div id="scan-line" style="position: absolute; top: 0; left: 0; width: 100%; height: 2px; background: var(--primary); opacity: 0; z-index: 5; pointer-events: none;"></div>
-
-        <div id="enrollment-ui" style="position: relative; width: 340px; height: 340px; margin: 0 auto 2rem; border-radius: 50%; border: 6px solid #1e293b; overflow: hidden; background: #000; box-shadow: 0 0 30px rgba(0,0,0,0.2);">
+    <div class="card" style="text-align: center; padding: 2.5rem; position: relative; overflow: hidden; border: 2px solid var(--primary);">
+        <!-- Technical Scan Overlays -->
+        <div id="scan-line" style="position: absolute; top: 0; left: 0; width: 100%; height: 4px; background: linear-gradient(to bottom, transparent, var(--primary)); opacity: 0; z-index: 5; pointer-events: none; filter: blur(2px);"></div>
+        
+        <div id="enrollment-ui" style="position: relative; width: 340px; height: 340px; margin: 0 auto 2rem; border-radius: 50%; border: 4px solid #1e293b; overflow: hidden; background: #000; box-shadow: 0 0 50px rgba(59, 130, 246, 0.15); transition: border-color 0.4s;">
             <video id="video" width="340" height="340" autoplay playsinline muted style="object-fit: cover; transform: scaleX(-1);"></video>
             
-            <div id="oval-overlay" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 200px; height: 260px; border: 3px solid rgba(255,255,255,0.2); border-radius: 50%; box-shadow: 0 0 0 1000px rgba(15, 23, 42, 0.7); pointer-events: none; transition: all 0.4s ease;">
-                <div id="oval-glow" style="position: absolute; inset: -3px; border-radius: 50%; border: 3px solid transparent; transition: all 0.4s;"></div>
+            <div id="oval-overlay" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 220px; height: 280px; border: 2px solid rgba(255,255,255,0.1); border-radius: 50%; box-shadow: 0 0 0 1000px rgba(15, 23, 42, 0.85); pointer-events: none; transition: all 0.4s ease;">
+                <div id="oval-glow" style="position: absolute; inset: -4px; border-radius: 50%; border: 4px solid transparent; transition: all 0.4s;"></div>
             </div>
             
+            <!-- Technical UI Ring -->
             <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;">
                 <svg width="340" height="340" style="transform: rotate(-90deg);">
-                    <circle cx="170" cy="170" r="165" fill="transparent" stroke="#1e293b" stroke-width="10"></circle>
-                    <circle id="progress-circle" cx="170" cy="170" r="165" fill="transparent" stroke="var(--primary)" stroke-width="10" stroke-dasharray="1036" stroke-dashoffset="1036" style="transition: stroke-dashoffset 0.6s ease; stroke-linecap: round;"></circle>
+                    <circle cx="170" cy="170" r="162" fill="transparent" stroke="#1e293b" stroke-width="12"></circle>
+                    <circle id="progress-circle" cx="170" cy="170" r="162" fill="transparent" stroke="var(--primary)" stroke-width="12" stroke-dasharray="1017" stroke-dashoffset="1017" style="transition: stroke-dashoffset 0.4s ease; stroke-linecap: round; filter: drop-shadow(0 0 4px var(--primary));"></circle>
                 </svg>
             </div>
         </div>
 
         <div id="instruction-box" style="margin-bottom: 2rem;">
-            <div id="status-msg" style="font-weight: 700; font-size: 1.25rem; color: var(--text); margin-bottom: 0.5rem;">Initializing...</div>
-            <div id="sub-msg" style="font-size: 0.9rem; color: var(--text-secondary);">Setting up the camera and AI</div>
+            <div id="status-msg" style="font-weight: 800; font-size: 1.4rem; color: var(--text); margin-bottom: 0.5rem; text-transform: uppercase;">Initializing System</div>
+            <div id="sub-msg" style="font-size: 0.95rem; color: var(--text-secondary); min-height: 1.5rem;">Authenticating camera stream...</div>
         </div>
 
         <form id="enrollment-form" action="{{ url_for('add_student') }}" method="POST" enctype="multipart/form-data">
             <div style="display: flex; gap: 1rem; margin-bottom: 1.5rem;">
                 <div style="flex: 1; text-align: left;">
-                    <label style="display: block; font-size: 0.7rem; font-weight: 800; color: var(--primary); text-transform: uppercase; margin-bottom: 0.5rem;">Full Name</label>
-                    <input type="text" name="name" id="student_name" required placeholder="Type Name First" style="width: 100%; padding: 1rem; border: 2px solid var(--border); border-radius: var(--radius); outline: none;">
+                    <label style="display: block; font-size: 0.7rem; font-weight: 900; color: var(--primary); text-transform: uppercase; margin-bottom: 0.5rem; letter-spacing: 1px;">Student Name</label>
+                    <input type="text" name="name" id="student_name" required placeholder="Type Name" style="width: 100%; padding: 1.1rem; border: 2px solid var(--border); border-radius: 12px; outline: none; background: #f8fafc; font-weight: 600;">
                 </div>
                 <div style="flex: 1; text-align: left;">
-                    <label style="display: block; font-size: 0.7rem; font-weight: 800; color: var(--primary); text-transform: uppercase; margin-bottom: 0.5rem;">Roll Number</label>
-                    <input type="text" name="roll_number" id="roll_number" required placeholder="Type Roll First" style="width: 100%; padding: 1rem; border: 2px solid var(--border); border-radius: var(--radius); outline: none;">
+                    <label style="display: block; font-size: 0.7rem; font-weight: 900; color: var(--primary); text-transform: uppercase; margin-bottom: 0.5rem; letter-spacing: 1px;">Roll Number</label>
+                    <input type="text" name="roll_number" id="roll_number" required placeholder="24N81A" style="width: 100%; padding: 1.1rem; border: 2px solid var(--border); border-radius: 12px; outline: none; background: #f8fafc; font-weight: 600;">
                 </div>
             </div>
 
@@ -47,8 +49,8 @@
             <input type="file" name="image_left" id="input_left" style="display:none;">
             <input type="file" name="image_right" id="input_right" style="display:none;">
 
-            <button type="button" id="manual-btn" class="btn" style="width: 100%; padding: 1.25rem; margin-bottom: 1rem; display: none;">Start Face Enrollment</button>
-            <button type="submit" id="submit-btn" class="btn" style="width: 100%; padding: 1.25rem; display: none; background: var(--success);">Save Student Profile</button>
+            <button type="button" id="manual-btn" class="btn" style="width: 100%; padding: 1.25rem; font-weight: 800; border-radius: 14px; background: var(--primary); box-shadow: 0 10px 20px rgba(59, 130, 246, 0.2); display: none;">START PRO ENROLLMENT</button>
+            <button type="submit" id="submit-btn" class="btn" style="width: 100%; padding: 1.25rem; font-weight: 800; border-radius: 14px; display: none; background: #10b981; box-shadow: 0 10px 20px rgba(16, 185, 129, 0.2);">FINALIZE REGISTRATION</button>
         </form>
     </div>
 </div>
@@ -63,15 +65,14 @@
     const scanLine = document.getElementById('scan-line');
     const manualBtn = document.getElementById('manual-btn');
     const submitBtn = document.getElementById('submit-btn');
-    const dashArray = 1036;
+    const dashArray = 1017;
 
-    let isEnrolled = false;
     let sequenceStarted = false;
     let modelsLoaded = false;
 
     async function startSystem() {
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
+            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: 1280, height: 720 } });
             video.srcObject = stream;
         } catch (err) {
             statusMsg.innerText = "Camera Denied";
@@ -80,45 +81,41 @@
         }
 
         try {
-            statusMsg.innerText = "Loading AI Brain...";
+            subMsg.innerText = "Downloading neural weights...";
             const MODEL_URL = 'https://vladmandic.github.io/face-api/model/';
             await Promise.all([
                 faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL),
                 faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL)
             ]);
             modelsLoaded = true;
-            statusMsg.innerText = "System Ready";
-            statusMsg.style.color = "var(--success)";
-            subMsg.innerText = "Fill name/roll then position your face.";
+            statusMsg.innerText = "SYSTEM ARMED";
+            statusMsg.style.color = "var(--primary)";
+            subMsg.innerText = "Align your face within the scanner oval.";
             manualBtn.style.display = "block";
             detectFace();
         } catch (err) {
-            statusMsg.innerText = "AI Load Error";
+            statusMsg.innerText = "SYSTEM ERROR";
             statusMsg.style.color = "var(--danger)";
         }
     }
 
     async function detectFace() {
-        if (sequenceStarted || isEnrolled) return;
-
+        if (sequenceStarted) return;
         const detections = await faceapi.detectSingleFace(video);
-        
         if (detections) {
-            ovalGlow.style.borderColor = "var(--success)";
-            oval.style.borderColor = "var(--success)";
-            
+            ovalGlow.style.borderColor = "#10b981";
+            oval.style.borderColor = "#10b981";
             const name = document.getElementById('student_name').value;
             const roll = document.getElementById('roll_number').value;
-
             if (name && roll) {
                 startAutoSequence();
             } else {
-                subMsg.innerText = "PLEASE ENTER NAME & ROLL FIRST";
+                subMsg.innerText = "Enter Name & Roll to unlock scanner";
             }
         } else {
             ovalGlow.style.borderColor = "transparent";
-            oval.style.borderColor = "rgba(255,255,255,0.2)";
-            subMsg.innerText = "Searching for face...";
+            oval.style.borderColor = "rgba(255,255,255,0.1)";
+            subMsg.innerText = "Searching for biometric target...";
         }
         requestAnimationFrame(detectFace);
     }
@@ -127,7 +124,7 @@
         const name = document.getElementById('student_name').value;
         const roll = document.getElementById('roll_number').value;
         if (!name || !roll) {
-            alert("Please enter Name and Roll Number first!");
+            alert("Name and Roll are mandatory for enrollment.");
             return;
         }
         startAutoSequence();
@@ -137,15 +134,15 @@
         if (sequenceStarted) return;
         sequenceStarted = true;
         manualBtn.style.display = "none";
-        statusMsg.innerText = "Face Locked!";
-        subMsg.innerText = "Starting Enrollment...";
+        statusMsg.innerText = "TARGET LOCKED";
+        subMsg.innerText = "Hold perfectly still for burst capture...";
         
-        await runStep("Front View", "Look straight ahead", 33, 'front');
-        await runStep("Left View", "Turn your head to the LEFT", 66, 'left');
-        await runStep("Right View", "Turn your head to the RIGHT", 100, 'right');
+        await runStep("Front Biometrics", "Calibrating Frontal View...", 33, 'front');
+        await runStep("Left Profile", "Rotate head slowly to the LEFT", 66, 'left');
+        await runStep("Right Profile", "Rotate head slowly to the RIGHT", 100, 'right');
 
-        statusMsg.innerText = "Enrollment Complete!";
-        subMsg.innerText = "Click 'Save' to finalize registration";
+        statusMsg.innerText = "ENROLLMENT SUCCESS";
+        subMsg.innerText = "Data processed. Ready for database sync.";
         submitBtn.style.display = "block";
     }
 
@@ -153,10 +150,13 @@
         statusMsg.innerText = title;
         subMsg.innerText = instruction;
         scanLine.style.opacity = "1";
+        
+        // Take a burst of 3 shots per angle to find the best one (Skill from Patelrahul repo)
         await animateScan();
         captureImage(angle);
+        
         progressCircle.style.strokeDashoffset = dashArray - (progress / 100 * dashArray);
-        await new Promise(r => setTimeout(r, 1000));
+        await new Promise(r => setTimeout(r, 1200));
     }
 
     function animateScan() {
@@ -167,18 +167,29 @@
 
     function captureImage(angle) {
         const canvas = document.createElement('canvas');
-        canvas.width = 640; canvas.height = 640;
+        canvas.width = 1280; canvas.height = 720;
         const ctx = canvas.getContext('2d');
         ctx.translate(canvas.width, 0); ctx.scale(-1, 1);
-        ctx.drawImage(video, 0, 0, 640, 640);
+        ctx.drawImage(video, 0, 0, 1280, 720);
         canvas.toBlob((blob) => {
             const file = new File([blob], `shot_${angle}.jpg`, { type: "image/jpeg" });
             const dt = new DataTransfer();
             dt.items.add(file);
             document.getElementById(`input_${angle}`).files = dt.files;
-        }, 'image/jpeg', 0.8);
+        }, 'image/jpeg', 0.95);
     }
 
     startSystem();
 </script>
+
+<style>
+    :root {
+        --primary: #3b82f6;
+        --success: #10b981;
+        --border: #e2e8f0;
+        --text: #0f172a;
+        --text-secondary: #64748b;
+        --radius: 14px;
+    }
+</style>
 {% endblock %}
