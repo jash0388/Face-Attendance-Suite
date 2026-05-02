@@ -6,7 +6,7 @@
 
 <div class="container" style="max-width: 600px;">
     <h1>Face ID Enrollment</h1>
-    <p class="subtitle">System will automatically detect you. Place your face in the oval.</p>
+    <p class="subtitle">Enter details and align your face in the oval.</p>
 
     <div class="card" style="text-align: center; padding: 2.5rem; position: relative; overflow: hidden;">
         <div id="scan-line" style="position: absolute; top: 0; left: 0; width: 100%; height: 2px; background: var(--primary); opacity: 0; z-index: 5; pointer-events: none;"></div>
@@ -27,19 +27,19 @@
         </div>
 
         <div id="instruction-box" style="margin-bottom: 2rem;">
-            <div id="status-msg" style="font-weight: 700; font-size: 1.25rem; color: var(--text); margin-bottom: 0.5rem;">Connecting...</div>
-            <div id="sub-msg" style="font-size: 0.9rem; color: var(--text-secondary);">Initializing System</div>
+            <div id="status-msg" style="font-weight: 700; font-size: 1.25rem; color: var(--text); margin-bottom: 0.5rem;">Initializing...</div>
+            <div id="sub-msg" style="font-size: 0.9rem; color: var(--text-secondary);">Setting up the camera and AI</div>
         </div>
 
         <form id="enrollment-form" action="{{ url_for('add_student') }}" method="POST" enctype="multipart/form-data">
             <div style="display: flex; gap: 1rem; margin-bottom: 1.5rem;">
                 <div style="flex: 1; text-align: left;">
                     <label style="display: block; font-size: 0.7rem; font-weight: 800; color: var(--primary); text-transform: uppercase; margin-bottom: 0.5rem;">Full Name</label>
-                    <input type="text" name="name" id="student_name" required placeholder="Student Name" style="width: 100%; padding: 1rem; border: 2px solid var(--border); border-radius: var(--radius); outline: none;">
+                    <input type="text" name="name" id="student_name" required placeholder="Type Name First" style="width: 100%; padding: 1rem; border: 2px solid var(--border); border-radius: var(--radius); outline: none;">
                 </div>
                 <div style="flex: 1; text-align: left;">
                     <label style="display: block; font-size: 0.7rem; font-weight: 800; color: var(--primary); text-transform: uppercase; margin-bottom: 0.5rem;">Roll Number</label>
-                    <input type="text" name="roll_number" id="roll_number" required placeholder="e.g. 24N81A" style="width: 100%; padding: 1rem; border: 2px solid var(--border); border-radius: var(--radius); outline: none;">
+                    <input type="text" name="roll_number" id="roll_number" required placeholder="Type Roll First" style="width: 100%; padding: 1rem; border: 2px solid var(--border); border-radius: var(--radius); outline: none;">
                 </div>
             </div>
 
@@ -47,7 +47,8 @@
             <input type="file" name="image_left" id="input_left" style="display:none;">
             <input type="file" name="image_right" id="input_right" style="display:none;">
 
-            <button type="submit" id="submit-btn" class="btn" style="width: 100%; padding: 1.25rem; display: none; background: var(--success);">Register Student Profile</button>
+            <button type="button" id="manual-btn" class="btn" style="width: 100%; padding: 1.25rem; margin-bottom: 1rem; display: none;">Start Face Enrollment</button>
+            <button type="submit" id="submit-btn" class="btn" style="width: 100%; padding: 1.25rem; display: none; background: var(--success);">Save Student Profile</button>
         </form>
     </div>
 </div>
@@ -60,79 +61,82 @@
     const ovalGlow = document.getElementById('oval-glow');
     const progressCircle = document.getElementById('progress-circle');
     const scanLine = document.getElementById('scan-line');
+    const manualBtn = document.getElementById('manual-btn');
     const submitBtn = document.getElementById('submit-btn');
     const dashArray = 1036;
 
     let isEnrolled = false;
     let sequenceStarted = false;
     let modelsLoaded = false;
-    let hasError = false;
 
     async function startSystem() {
-        // Start camera first
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
             video.srcObject = stream;
-            statusMsg.innerText = "Camera Active";
         } catch (err) {
-            hasError = true;
-            statusMsg.innerText = "Camera Error";
+            statusMsg.innerText = "Camera Denied";
             statusMsg.style.color = "var(--danger)";
-            subMsg.innerText = "Please allow camera access and refresh.";
             return;
         }
 
-        // Load Models
         try {
-            subMsg.innerText = "Loading AI models...";
+            statusMsg.innerText = "Loading AI Brain...";
             const MODEL_URL = 'https://vladmandic.github.io/face-api/model/';
             await Promise.all([
-                faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+                faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL),
                 faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL)
             ]);
             modelsLoaded = true;
             statusMsg.innerText = "System Ready";
             statusMsg.style.color = "var(--success)";
-            subMsg.innerText = "Please position your face in the oval.";
+            subMsg.innerText = "Fill name/roll then position your face.";
+            manualBtn.style.display = "block";
             detectFace();
         } catch (err) {
-            hasError = true;
-            statusMsg.innerText = "AI Error";
+            statusMsg.innerText = "AI Load Error";
             statusMsg.style.color = "var(--danger)";
-            subMsg.innerText = "Failed to load models. Try refreshing.";
         }
     }
 
     async function detectFace() {
-        if (sequenceStarted || isEnrolled || hasError) return;
+        if (sequenceStarted || isEnrolled) return;
 
-        const detections = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 160, scoreThreshold: 0.4 }));
+        const detections = await faceapi.detectSingleFace(video);
         
         if (detections) {
-            const box = detections.box;
-            if (box.width > 120) {
-                ovalGlow.style.borderColor = "var(--success)";
-                oval.style.borderColor = "var(--success)";
-                
-                if (document.getElementById('student_name').value && document.getElementById('roll_number').value) {
-                    startAutoSequence();
-                } else {
-                    subMsg.innerText = "Enter Name & Roll to unlock enrollment";
-                }
+            ovalGlow.style.borderColor = "var(--success)";
+            oval.style.borderColor = "var(--success)";
+            
+            const name = document.getElementById('student_name').value;
+            const roll = document.getElementById('roll_number').value;
+
+            if (name && roll) {
+                startAutoSequence();
             } else {
-                ovalGlow.style.borderColor = "var(--primary)";
-                oval.style.borderColor = "rgba(255,255,255,0.2)";
-                subMsg.innerText = "Get closer and center your face";
+                subMsg.innerText = "PLEASE ENTER NAME & ROLL FIRST";
             }
         } else {
             ovalGlow.style.borderColor = "transparent";
+            oval.style.borderColor = "rgba(255,255,255,0.2)";
             subMsg.innerText = "Searching for face...";
         }
         requestAnimationFrame(detectFace);
     }
 
+    manualBtn.addEventListener('click', () => {
+        const name = document.getElementById('student_name').value;
+        const roll = document.getElementById('roll_number').value;
+        if (!name || !roll) {
+            alert("Please enter Name and Roll Number first!");
+            return;
+        }
+        startAutoSequence();
+    });
+
     async function startAutoSequence() {
+        if (sequenceStarted) return;
         sequenceStarted = true;
+        manualBtn.style.display = "none";
         statusMsg.innerText = "Face Locked!";
         subMsg.innerText = "Starting Enrollment...";
         
@@ -141,7 +145,7 @@
         await runStep("Right View", "Turn your head to the RIGHT", 100, 'right');
 
         statusMsg.innerText = "Enrollment Complete!";
-        subMsg.innerText = "Click the button below to save";
+        subMsg.innerText = "Click 'Save' to finalize registration";
         submitBtn.style.display = "block";
     }
 
@@ -152,12 +156,12 @@
         await animateScan();
         captureImage(angle);
         progressCircle.style.strokeDashoffset = dashArray - (progress / 100 * dashArray);
-        await new Promise(r => setTimeout(r, 800));
+        await new Promise(r => setTimeout(r, 1000));
     }
 
     function animateScan() {
         return new Promise(resolve => {
-            scanLine.animate([{ top: '0%' }, { top: '100%' }], { duration: 1200, iterations: 1 }).onfinish = resolve;
+            scanLine.animate([{ top: '0%' }, { top: '100%' }], { duration: 1500, iterations: 1 }).onfinish = resolve;
         });
     }
 
