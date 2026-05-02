@@ -72,13 +72,31 @@
     let modelsLoaded = false;
 
     async function loadModels() {
-        const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/';
-        await Promise.all([
-            faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
-            faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL)
-        ]);
-        modelsLoaded = true;
-        initCamera();
+        try {
+            // Using a more reliable CDN for models
+            const MODEL_URL = 'https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights/';
+            
+            // Start camera early so the user isn't staring at a black screen
+            initCamera();
+
+            await Promise.all([
+                faceapi.nets.tinyFaceDetector.loadFromUri('https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@master/weights/'),
+                faceapi.nets.faceLandmark68Net.loadFromUri('https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@master/weights/')
+            ]);
+            
+            modelsLoaded = true;
+            statusMsg.innerText = "AI Online";
+            statusMsg.style.color = "var(--success)";
+            setTimeout(() => {
+                statusMsg.innerText = "Position Your Face";
+                statusMsg.style.color = "var(--text)";
+            }, 1000);
+        } catch (err) {
+            console.error("Model Load Error:", err);
+            statusMsg.innerText = "AI Loading Failed";
+            subMsg.innerText = "Check your internet or refresh the page";
+            statusMsg.style.color = "var(--danger)";
+        }
     }
 
     async function initCamera() {
