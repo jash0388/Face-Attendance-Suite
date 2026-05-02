@@ -8,9 +8,7 @@ from supabase import create_client, Client
 from dotenv import load_dotenv
 from datetime import datetime
 import time
-import base64
-from PIL import Image
-import io
+import threading
 
 # Load Environment Variables
 load_dotenv()
@@ -25,6 +23,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 # Global lists for fast recognition
 known_face_encodings = []
 known_face_names = []
+camera_source = 0
 
 def reload_encodings():
     global known_face_encodings, known_face_names
@@ -34,7 +33,6 @@ def reload_encodings():
         for s in res.data:
             raw_enc = s.get("encoding")
             if raw_enc:
-                # Handle both single and multi-vector encodings
                 if isinstance(raw_enc, list) and len(raw_enc) > 0:
                     if isinstance(raw_enc[0], list):
                         for sub in raw_enc:
@@ -44,7 +42,7 @@ def reload_encodings():
                         encs.append(np.array(raw_enc, dtype=np.float64))
                         names.append(f"{s['name']}|{s['roll_number']}")
         known_face_encodings, known_face_names = encs, names
-        print(f">>> {len(known_face_encodings)} FACE VECTORS LOADED INTO SYSTEM MEMORY.")
+        print(f">>> {len(known_face_encodings)} FACE VECTORS LOADED.")
     except Exception as e:
         print(f">>> ERROR LOADING ENCODINGS: {e}")
 
@@ -66,11 +64,9 @@ def add_student():
     if request.method == "POST":
         name = request.form.get("name")
         roll = request.form.get("roll_number")
-        
         angles = ["front", "left", "right"]
         all_encodings = []
         main_image_url = ""
-
         try:
             for angle in angles:
                 file = request.files.get(f"image_{angle}")
@@ -78,14 +74,11 @@ def add_student():
                     img_bytes = file.read()
                     nparr = np.frombuffer(img_bytes, np.uint8)
                     img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-                    
                     rgb_img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
                     face_locs = face_recognition.face_locations(rgb_img)
-                    
                     if face_locs:
                         enc = face_recognition.face_encodings(rgb_img, face_locs)[0]
                         all_encodings.append(enc.tolist())
-                        
                         if angle == "front":
                             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                             filename = f"{roll}_{timestamp}.jpg"
@@ -97,7 +90,7 @@ def add_student():
                             main_image_url = supabase.storage.from_("face-attendance").get_public_url(f"students/{filename}")
 
             if not all_encodings:
-                flash("No faces detected. Ensure good lighting.", "error")
+                flash("No faces detected. Ensure your face is in the oval.", "error")
                 return redirect(url_for("add_student"))
 
             supabase.table("students").insert({
@@ -107,14 +100,19 @@ def add_student():
             }).execute()
 
             reload_encodings()
-            flash(f"Face ID Enrolled for {name}.", "success")
+            flash(f"Success! {name} is now enrolled.", "success")
             return redirect(url_for("list_students"))
-
         except Exception as e:
-            flash(f"Enrollment Failed: {str(e)}", "error")
+            flash(f"Error: {str(e)}", "error")
             return redirect(url_for("add_student"))
-
     return render_template("add_student.html")
+
+@app.route("/students/delete/<int:student_id>", methods=["POST"])
+def delete_student(student_id: int):
+    supabase.table("students").delete().eq("id", student_id).execute()
+    reload_encodings()
+    flash("Student record removed.", "success")
+    return redirect(url_for("list_students"))
 
 @app.route("/attendance")
 def view_attendance():
@@ -125,26 +123,56 @@ def view_attendance():
     res = query.order("date", desc=True).order("time", desc=True).execute()
     return render_template("attendance.html", rows=res.data)
 
+@app.route("/admin")
+def admin_dashboard():
+    res_count = supabase.table("unknown_detections").select("count", count="exact").execute()
+    total_unknowns = res_count.count if res_count.count is not None else 0
+    res_recent = supabase.table("unknown_detections").select("*").order("detected_at", desc=True).limit(5).execute()
+    return render_template("admin_dashboard.html", total_unknowns=total_unknowns, recent_unknowns=res_recent.data)
+
+@app.route("/admin/unknowns")
+def list_unknowns():
+    res = supabase.table("unknown_detections").select("*").order("detected_at", desc=True).execute()
+    return render_template("unknown_detections.html", unknowns=res.data)
+
+@app.route("/admin/unknowns/delete/<int:detection_id>", methods=["POST"])
+def delete_unknown(detection_id: int):
+    supabase.table("unknown_detections").delete().eq("id", detection_id).execute()
+    flash("Alert record deleted.", "success")
+    return redirect(url_for("list_unknowns"))
+
+@app.route("/students/image/<path:filename>")
+@app.route("/unknown/image/<path:filename>")
+def serve_image(filename: str):
+    # This ensures old links still work by redirecting to Supabase
+    bucket = "students" if "roll" in filename or "_" in filename else "unknowns"
+    url = supabase.storage.from_("face-attendance").get_public_url(f"{bucket}/{filename}")
+    return redirect(url)
+
+@app.route("/api/config-camera", methods=["POST"])
+def config_camera():
+    global camera_source
+    data = request.get_json(silent=True) or {}
+    source = data.get("source", "0")
+    camera_source = int(source) if source.isdigit() else source
+    return jsonify({"ok": True, "source": camera_source})
+
 def generate_frames():
-    global known_face_encodings, known_face_names
+    global known_face_encodings, known_face_names, camera_source
     if not known_face_encodings: reload_encodings()
-    
-    cap = cv2.VideoCapture(0)
+    cap = cv2.VideoCapture(camera_source)
     marked_today = set()
     frame_count = 0
     last_face_data = []
-
     while True:
         success, frame = cap.read()
         if not success: break
-        
         frame_count += 1
         if frame_count % 3 == 0:
             last_face_data = []
             rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             face_locs = face_recognition.face_locations(rgb_frame)
             face_encs = face_recognition.face_encodings(rgb_frame, face_locs)
-            
             for (top, right, bottom, left), face_enc in zip(face_locs, face_encs):
                 name, roll = "Unknown", ""
                 if known_face_encodings:
@@ -152,8 +180,7 @@ def generate_frames():
                     best_match_idx = np.argmin(distances)
                     if distances[best_match_idx] <= 0.5:
                         label_data = known_face_names[best_match_idx].split("|")
-                        name = label_data[0]
-                        roll = label_data[1]
+                        name, roll = label_data[0], label_data[1]
                         today = datetime.now().strftime("%Y-%m-%d")
                         if f"{roll}|{today}" not in marked_today:
                             supabase.table("attendance").insert({
@@ -161,31 +188,18 @@ def generate_frames():
                                 "time": datetime.now().strftime("%H:%M:%S")
                             }).execute()
                             marked_today.add(f"{roll}|{today}")
-
-                last_face_data.append({
-                    "box": (top, right, bottom, left),
-                    "label": name.upper()
-                })
-
+                last_face_data.append({"box": (top, right, bottom, left), "label": name.upper()})
         for face in last_face_data:
             t, r, b, l = face["box"]
             color = (16, 185, 129) if face["label"] != "UNKNOWN" else (59, 130, 246)
             cv2.rectangle(frame, (l, t), (r, b), color, 2)
             cv2.putText(frame, face["label"], (l, t-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
-
         ret, buffer = cv2.imencode('.jpg', frame)
         yield (b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
 
 @app.route("/video_feed")
 def video_feed():
     return Response(generate_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
-
-@app.route("/admin")
-def admin_dashboard():
-    res_count = supabase.table("unknown_detections").select("count", count="exact").execute()
-    total_unknowns = res_count.count if res_count.count is not None else 0
-    res_recent = supabase.table("unknown_detections").select("*").order("detected_at", desc=True).limit(5).execute()
-    return render_template("admin_dashboard.html", total_unknowns=total_unknowns, recent_unknowns=res_recent.data)
 
 @app.route("/camera")
 def camera():
@@ -194,5 +208,5 @@ def camera():
 if __name__ == "__main__":
     reload_encodings()
     port = int(os.environ.get("PORT", 3000))
-    print(f">>> STARTING PRODUCTION SERVER ON PORT {port}...")
+    print(f">>> PRODUCTION SERVER READY ON PORT {port}")
     serve(app, host="0.0.0.0", port=port)
