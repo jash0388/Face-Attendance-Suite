@@ -35,13 +35,14 @@ def reload_encodings():
             raw_enc = s.get("encoding")
             if raw_enc:
                 # Handle both single and multi-vector encodings
-                if isinstance(raw_enc[0], list):
-                    for sub in raw_enc:
-                        encs.append(np.array(sub, dtype=np.float64))
+                if isinstance(raw_enc, list) and len(raw_enc) > 0:
+                    if isinstance(raw_enc[0], list):
+                        for sub in raw_enc:
+                            encs.append(np.array(sub, dtype=np.float64))
+                            names.append(f"{s['name']}|{s['roll_number']}")
+                    else:
+                        encs.append(np.array(raw_enc, dtype=np.float64))
                         names.append(f"{s['name']}|{s['roll_number']}")
-                else:
-                    encs.append(np.array(raw_enc, dtype=np.float64))
-                    names.append(f"{s['name']}|{s['roll_number']}")
         known_face_encodings, known_face_names = encs, names
         print(f">>> {len(known_face_encodings)} FACE VECTORS LOADED INTO SYSTEM MEMORY.")
     except Exception as e:
@@ -66,8 +67,6 @@ def add_student():
         name = request.form.get("name")
         roll = request.form.get("roll_number")
         
-        # We expect a burst of images (Front, Left, Right)
-        # To maximize accuracy (Skill from Patelrahul repo), we will crop faces
         angles = ["front", "left", "right"]
         all_encodings = []
         main_image_url = ""
@@ -77,20 +76,16 @@ def add_student():
                 file = request.files.get(f"image_{angle}")
                 if file:
                     img_bytes = file.read()
-                    # Convert to OpenCV format
                     nparr = np.frombuffer(img_bytes, np.uint8)
                     img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
                     
-                    # PRO SKILL: Convert to RGB and find faces for CROPPING
                     rgb_img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
                     face_locs = face_recognition.face_locations(rgb_img)
                     
                     if face_locs:
-                        # Extract encoding from the FULL image first
                         enc = face_recognition.face_encodings(rgb_img, face_locs)[0]
                         all_encodings.append(enc.tolist())
                         
-                        # Save the 'Front' angle as the profile picture
                         if angle == "front":
                             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                             filename = f"{roll}_{timestamp}.jpg"
@@ -102,20 +97,17 @@ def add_student():
                             main_image_url = supabase.storage.from_("face-attendance").get_public_url(f"students/{filename}")
 
             if not all_encodings:
-                flash("No faces detected in any angle. Try again.", "error")
+                flash("No faces detected. Ensure good lighting.", "error")
                 return redirect(url_for("add_student"))
 
-            # Save Student to Supabase
             supabase.table("students").insert({
-                "name": name,
-                "roll_number": roll,
-                "image_path": main_image_url,
-                "encoding": all_encodings,
+                "name": name, "roll_number": roll,
+                "image_path": main_image_url, "encoding": all_encodings,
                 "created_at": datetime.now().isoformat()
             }).execute()
 
             reload_encodings()
-            flash(f"Face ID Enrolled for {name} with {len(all_encodings)} angles.", "success")
+            flash(f"Face ID Enrolled for {name}.", "success")
             return redirect(url_for("list_students"))
 
         except Exception as e:
@@ -124,7 +116,14 @@ def add_student():
 
     return render_template("add_student.html")
 
-# (Other management routes: delete_student, view_attendance, etc. remain the same)
+@app.route("/attendance")
+def view_attendance():
+    q = request.args.get("q", "").strip()
+    query = supabase.table("attendance").select("*")
+    if q:
+        query = query.or_(f"name.ilike.%{q}%,roll_number.ilike.%{q}%")
+    res = query.order("date", desc=True).order("time", desc=True).execute()
+    return render_template("attendance.html", rows=res.data)
 
 def generate_frames():
     global known_face_encodings, known_face_names
@@ -142,23 +141,19 @@ def generate_frames():
         frame_count += 1
         if frame_count % 3 == 0:
             last_face_data = []
-            # PRO SKILL: Increase recognition resolution for better CCTV performance
-            # Processing at full size for maximum accuracy
             rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            
-            # Use 'hog' for speed, but upsample once to find small/distant faces
-            face_locs = face_recognition.face_locations(rgb_frame, number_of_times_to_upsample=1)
+            face_locs = face_recognition.face_locations(rgb_frame)
             face_encs = face_recognition.face_encodings(rgb_frame, face_locs)
             
             for (top, right, bottom, left), face_enc in zip(face_locs, face_encs):
                 name, roll = "Unknown", ""
                 if known_face_encodings:
-                    # PRO SKILL: Use a tighter distance tolerance (0.5) for high-accuracy security
                     distances = face_recognition.face_distance(known_face_encodings, face_enc)
                     best_match_idx = np.argmin(distances)
                     if distances[best_match_idx] <= 0.5:
-                        name, roll = known_labels[best_match_idx].split("|")
-                        # Mark Attendance Logic
+                        label_data = known_face_names[best_match_idx].split("|")
+                        name = label_data[0]
+                        roll = label_data[1]
                         today = datetime.now().strftime("%Y-%m-%d")
                         if f"{roll}|{today}" not in marked_today:
                             supabase.table("attendance").insert({
@@ -172,7 +167,6 @@ def generate_frames():
                     "label": name.upper()
                 })
 
-        # Draw Tech-UI overlays
         for face in last_face_data:
             t, r, b, l = face["box"]
             color = (16, 185, 129) if face["label"] != "UNKNOWN" else (59, 130, 246)
@@ -186,10 +180,19 @@ def generate_frames():
 def video_feed():
     return Response(generate_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
-# (Main boilerplates remain same...)
+@app.route("/admin")
+def admin_dashboard():
+    res_count = supabase.table("unknown_detections").select("count", count="exact").execute()
+    total_unknowns = res_count.count if res_count.count is not None else 0
+    res_recent = supabase.table("unknown_detections").select("*").order("detected_at", desc=True).limit(5).execute()
+    return render_template("admin_dashboard.html", total_unknowns=total_unknowns, recent_unknowns=res_recent.data)
+
+@app.route("/camera")
+def camera():
+    return render_template("camera.html")
+
 if __name__ == "__main__":
     reload_encodings()
-    # Railway provides the PORT environment variable automatically
     port = int(os.environ.get("PORT", 3000))
     print(f">>> STARTING PRODUCTION SERVER ON PORT {port}...")
     serve(app, host="0.0.0.0", port=port)
