@@ -2,8 +2,20 @@
 {% block title %}LOGS - Face Attendance{% endblock %}
 
 {% block content %}
-  <h1>Attendance Records</h1>
-  <p class="subtitle">Viewing latest attendance logs</p>
+  <div class="toolbar">
+    <div>
+      <h1>Attendance Records</h1>
+      <p class="subtitle">Viewing latest attendance logs</p>
+    </div>
+    <form action="{{ url_for('view_attendance') }}" method="GET" style="display: flex; gap: 0.5rem; align-items: center;">
+      <input type="text" name="q" placeholder="Search Name or Roll..." value="{{ request.args.get('q', '') }}" 
+             style="padding: 0.6rem 1rem; border: 1px solid var(--border); border-radius: 8px; outline: none; font-family: inherit;">
+      <button type="submit" class="btn">Search</button>
+      {% if request.args.get('q') %}
+        <a href="{{ url_for('view_attendance') }}" style="font-size: 0.8rem; color: var(--text-secondary);">Clear</a>
+      {% endif %}
+    </form>
+  </div>
 
   {% if rows %}
     <table>
@@ -18,10 +30,10 @@
       <tbody>
         {% for r in rows %}
           <tr>
-            <td style="font-weight:700;">{{ r['Name'].upper() }}</td>
-            <td>{{ r['Roll Number'] }}</td>
-            <td>{{ r['Date'] }}</td>
-            <td>{{ r['Time'] }}</td>
+            <td style="font-weight:700;">{{ r['name'].upper() }}</td>
+            <td>{{ r['roll_number'] }}</td>
+            <td>{{ r['date'] }}</td>
+            <td>{{ r['time'] }}</td>
           </tr>
         {% endfor %}
       </tbody>

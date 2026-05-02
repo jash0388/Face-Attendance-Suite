@@ -33,7 +33,7 @@
         {% for u in recent_unknowns %}
         <tr>
           <td>
-            <img src="{{ url_for('unknown_image', filename=u.image_path) }}" class="thumb" style="width: 80px; height: 80px;">
+            <img src="{{ u.image_path }}" class="thumb" style="width: 80px; height: 80px;">
           </td>
           <td>{{ u.detected_at }}</td>
         </tr>

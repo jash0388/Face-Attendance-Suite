@@ -1,136 +1,184 @@
 {% extends "base.html" %}
-{% block title %}NEW_RECORD - Face Attendance{% endblock %}
+{% block title %}FACE ID ENROLLMENT - Face Attendance{% endblock %}
 
 {% block content %}
-  <h1>Register New Student</h1>
-  <p class="subtitle">Fill in the details below to add a student</p>
+<!-- Load Face-API.js from CDN for browser-side detection -->
+<script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
 
-  <div class="card" style="max-width:560px">
-    <form id="add-student-form" method="POST" enctype="multipart/form-data">
-      <div class="field">
-        <label for="name">Full Name</label>
-        <input type="text" id="name" name="name" required placeholder="Enter student name">
-      </div>
+<div class="container" style="max-width: 600px;">
+    <h1>Face ID Enrollment</h1>
+    <p class="subtitle">AI will automatically detect you. Place your face in the oval.</p>
 
-      <div class="field">
-        <label for="roll_number">Roll Number</label>
-        <input type="text" id="roll_number" name="roll_number" required placeholder="Enter roll number">
-      </div>
+    <div class="card" style="text-align: center; padding: 2.5rem; position: relative; overflow: hidden;">
+        <!-- Scanning Effect -->
+        <div id="scan-line" style="position: absolute; top: 0; left: 0; width: 100%; height: 2px; background: var(--primary); opacity: 0; z-index: 5; pointer-events: none;"></div>
 
-      <div class="field">
-        <label>Add Photo</label>
-        <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
-          <button type="button" class="btn" id="tab-upload" onclick="switchTab('upload')">Upload Image</button>
-          <button type="button" class="btn" id="tab-webcam" onclick="switchTab('webcam')">Use Camera</button>
+        <div id="enrollment-ui" style="position: relative; width: 340px; height: 340px; margin: 0 auto 2rem; border-radius: 50%; border: 6px solid #1e293b; overflow: hidden; background: #000; box-shadow: 0 0 30px rgba(0,0,0,0.2); transition: border-color 0.4s;">
+            <video id="video" width="340" height="340" autoplay playsinline style="object-fit: cover; transform: scaleX(-1);"></video>
+            
+            <!-- Face-ID Oval -->
+            <div id="oval-overlay" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 200px; height: 260px; border: 3px solid rgba(255,255,255,0.2); border-radius: 50%; box-shadow: 0 0 0 1000px rgba(15, 23, 42, 0.7); pointer-events: none; transition: all 0.4s ease;">
+                <div id="oval-glow" style="position: absolute; inset: -3px; border-radius: 50%; border: 3px solid transparent; transition: all 0.4s;"></div>
+            </div>
+            
+            <!-- Progress Ring -->
+            <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;">
+                <svg width="340" height="340" style="transform: rotate(-90deg);">
+                    <circle cx="170" cy="170" r="165" fill="transparent" stroke="#1e293b" stroke-width="10"></circle>
+                    <circle id="progress-circle" cx="170" cy="170" r="165" fill="transparent" stroke="var(--primary)" stroke-width="10" stroke-dasharray="1036" stroke-dashoffset="1036" style="transition: stroke-dashoffset 0.6s ease; stroke-linecap: round;"></circle>
+                </svg>
+            </div>
         </div>
 
-        <div id="mode-upload">
-          <input type="file" id="image" name="image" accept="image/png,image/jpeg">
+        <div id="instruction-box" style="margin-bottom: 2rem;">
+            <div id="status-msg" style="font-weight: 700; font-size: 1.25rem; color: var(--text); margin-bottom: 0.5rem;">Loading AI Models...</div>
+            <div id="sub-msg" style="font-size: 0.9rem; color: var(--text-secondary);">Please wait a moment</div>
         </div>
 
-        <div id="mode-webcam" style="display:none;">
-          <video id="webcam-preview" autoplay muted playsinline style="width:100%; border:1px solid var(--border); filter: grayscale(100%);"></video>
-          <canvas id="webcam-canvas" style="display:none;"></canvas>
-          <div style="margin-top: 1rem; display: flex; gap: 0.5rem;">
-            <button type="button" class="btn" id="btn-start-cam" onclick="startWebcam()">Open Camera</button>
-            <button type="button" class="btn" id="btn-capture" onclick="capturePhoto()" style="display:none;">Take Photo</button>
-            <button type="button" class="btn" id="btn-retake" onclick="retakePhoto()" style="display:none;">Try Again</button>
-          </div>
-          <div id="capture-status" style="margin-top:0.5rem; font-size:0.75rem; text-transform:uppercase;"></div>
-        </div>
-      </div>
+        <form id="enrollment-form" action="{{ url_for('add_student') }}" method="POST" enctype="multipart/form-data">
+            <div style="display: flex; gap: 1rem; margin-bottom: 1.5rem;">
+                <div style="flex: 1; text-align: left;">
+                    <label style="display: block; font-size: 0.7rem; font-weight: 800; color: var(--primary); text-transform: uppercase; margin-bottom: 0.5rem; letter-spacing: 1px;">Full Name</label>
+                    <input type="text" name="name" id="student_name" required placeholder="Student Name" style="width: 100%; padding: 1rem; border: 2px solid var(--border); border-radius: var(--radius); outline: none; font-size: 1rem; transition: border-color 0.2s;">
+                </div>
+                <div style="flex: 1; text-align: left;">
+                    <label style="display: block; font-size: 0.7rem; font-weight: 800; color: var(--primary); text-transform: uppercase; margin-bottom: 0.5rem; letter-spacing: 1px;">Roll Number</label>
+                    <input type="text" name="roll_number" id="roll_number" required placeholder="e.g. 24N81A6758" style="width: 100%; padding: 1rem; border: 2px solid var(--border); border-radius: var(--radius); outline: none; font-size: 1rem;">
+                </div>
+            </div>
 
-      <div style="display:flex; gap:1rem; margin-top:2rem;">
-        <button type="submit" class="btn" id="btn-submit">Save Student</button>
-        <a href="{{ url_for('list_students') }}" class="btn">Cancel</a>
-      </div>
-    </form>
-  </div>
+            <input type="file" name="image_front" id="input_front" style="display:none;">
+            <input type="file" name="image_left" id="input_left" style="display:none;">
+            <input type="file" name="image_right" id="input_right" style="display:none;">
 
-  <script>
-    let webcamStream = null;
-    let capturedBlob = null;
+            <button type="submit" id="submit-btn" class="btn" style="width: 100%; padding: 1.25rem; font-size: 1.1rem; display: none; background: var(--success); box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);">Register Student Profile</button>
+        </form>
+    </div>
+</div>
 
-    function switchTab(mode) {
-      document.getElementById('mode-upload').style.display = mode === 'upload' ? '' : 'none';
-      document.getElementById('mode-webcam').style.display = mode === 'webcam' ? '' : 'none';
-      if (mode === 'upload') { stopWebcam(); capturedBlob = null; }
+<script>
+    const video = document.getElementById('video');
+    const statusMsg = document.getElementById('status-msg');
+    const subMsg = document.getElementById('sub-msg');
+    const oval = document.getElementById('oval-overlay');
+    const ovalGlow = document.getElementById('oval-glow');
+    const progressCircle = document.getElementById('progress-circle');
+    const scanLine = document.getElementById('scan-line');
+    const submitBtn = document.getElementById('submit-btn');
+    const dashArray = 1036;
+
+    let isEnrolled = false;
+    let sequenceStarted = false;
+    let modelsLoaded = false;
+
+    async function loadModels() {
+        const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/';
+        await Promise.all([
+            faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+            faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL)
+        ]);
+        modelsLoaded = true;
+        initCamera();
     }
 
-    async function startWebcam() {
-      const video = document.getElementById('webcam-preview');
-      const statusEl = document.getElementById('capture-status');
-      try {
-        webcamStream = await navigator.mediaDevices.getUserMedia({ video: true });
-        video.srcObject = webcamStream;
-        await video.play();
-        document.getElementById('btn-start-cam').style.display = 'none';
-        document.getElementById('btn-capture').style.display = 'inline-block';
-        statusEl.textContent = 'CAMERA_READY: POSITION_FACE';
-      } catch (err) {
-        statusEl.textContent = 'ERROR: ' + err.message;
-      }
+    async function initCamera() {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 640 } });
+            video.srcObject = stream;
+            statusMsg.innerText = "Position Your Face";
+            subMsg.innerText = "Align your head inside the oval to start";
+            detectFace();
+        } catch (err) {
+            statusMsg.innerText = "Camera Access Denied";
+            statusMsg.style.color = "var(--danger)";
+        }
     }
 
-    function capturePhoto() {
-      const video = document.getElementById('webcam-preview');
-      const canvas = document.getElementById('webcam-canvas');
-      const statusEl = document.getElementById('capture-status');
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      canvas.getContext('2d').drawImage(video, 0, 0);
-      stopWebcam();
-      video.srcObject = null;
-      video.poster = canvas.toDataURL('image/jpeg');
-      canvas.toBlob(blob => {
-        capturedBlob = blob;
-        statusEl.textContent = 'IMAGE_CAPTURED: READY_TO_SAVE';
-        document.getElementById('btn-capture').style.display = 'none';
-        document.getElementById('btn-retake').style.display = 'inline-block';
-      }, 'image/jpeg');
-    }
+    async function detectFace() {
+        if (sequenceStarted || isEnrolled) return;
 
-    function retakePhoto() {
-      capturedBlob = null;
-      document.getElementById('btn-retake').style.display = 'none';
-      startWebcam();
-    }
-
-    function stopWebcam() {
-      if (webcamStream) { webcamStream.getTracks().forEach(t => t.stop()); webcamStream = null; }
-    }
-
-    document.getElementById('add-student-form').addEventListener('submit', function(e) {
-      const submitBtn = document.getElementById('btn-submit');
-      if (document.getElementById('mode-webcam').style.display !== 'none') {
-        if (!capturedBlob) { e.preventDefault(); alert('CAPTURE_IMAGE_REQUIRED'); return; }
-        e.preventDefault();
+        const detections = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions());
         
-        // Show loading state
-        submitBtn.disabled = true;
-        submitBtn.textContent = 'Saving Student...';
-        
-        const formData = new FormData(this);
-        formData.delete('image');
-        formData.append('image', capturedBlob, (formData.get('roll_number') || 'capture') + '.jpg');
-        
-        fetch(this.action || window.location.href, { method: 'POST', body: formData })
-          .then(res => { 
-            window.location.href = res.redirected ? res.url : '{{ url_for("list_students") }}'; 
-          })
-          .catch(err => {
-            alert('Error: ' + err.message);
-            submitBtn.disabled = false;
-            submitBtn.textContent = 'Save Student';
-          });
-      } else {
-        // Regular file upload
-        submitBtn.disabled = true;
-        submitBtn.textContent = 'Uploading...';
-      }
-    });
+        if (detections) {
+            const box = detections.box;
+            // Basic check: is the face roughly centered and large enough?
+            if (box.width > 150 && box.x > 100 && box.x < 350) {
+                ovalGlow.style.borderColor = "var(--success)";
+                oval.style.borderColor = "var(--success)";
+                
+                if (document.getElementById('student_name').value && document.getElementById('roll_number').value) {
+                    startAutoSequence();
+                } else {
+                    subMsg.innerText = "Enter Name & Roll to unlock enrollment";
+                }
+            } else {
+                ovalGlow.style.borderColor = "var(--primary)";
+                oval.style.borderColor = "rgba(255,255,255,0.2)";
+                subMsg.innerText = "Get closer and center your face";
+            }
+        } else {
+            ovalGlow.style.borderColor = "transparent";
+            subMsg.innerText = "Searching for face...";
+        }
 
-    window.addEventListener('beforeunload', stopWebcam);
-  </script>
+        requestAnimationFrame(detectFace);
+    }
+
+    async function startAutoSequence() {
+        sequenceStarted = true;
+        statusMsg.innerText = "Face Locked!";
+        subMsg.innerText = "Starting Enrollment...";
+        
+        // Front
+        await runStep("Front", "Look straight ahead", 33, 'front');
+        // Left
+        await runStep("Left Profile", "Turn your head to the LEFT", 66, 'left');
+        // Right
+        await runStep("Right Profile", "Turn your head to the RIGHT", 100, 'right');
+
+        statusMsg.innerText = "Enrollment Complete!";
+        subMsg.innerText = "Check your angles and click Register";
+        statusMsg.style.color = "var(--success)";
+        submitBtn.style.display = "block";
+    }
+
+    async function runStep(title, instruction, progress, angle) {
+        statusMsg.innerText = title;
+        subMsg.innerText = instruction;
+        
+        // Visual Scan Effect
+        scanLine.style.opacity = "1";
+        scanLine.style.top = "0%";
+        await animateScan();
+        
+        captureImage(angle);
+        progressCircle.style.strokeDashoffset = dashArray - (progress / 100 * dashArray);
+        await new Promise(r => setTimeout(r, 1000));
+    }
+
+    function animateScan() {
+        return new Promise(resolve => {
+            scanLine.animate([
+                { top: '0%' }, { top: '100%' }
+            ], { duration: 1500, iterations: 1 }).onfinish = resolve;
+        });
+    }
+
+    function captureImage(angle) {
+        const canvas = document.createElement('canvas');
+        canvas.width = 640; canvas.height = 640;
+        const ctx = canvas.getContext('2d');
+        ctx.translate(canvas.width, 0); ctx.scale(-1, 1);
+        ctx.drawImage(video, 0, 0, 640, 640);
+        
+        canvas.toBlob((blob) => {
+            const file = new File([blob], `shot_${angle}.jpg`, { type: "image/jpeg" });
+            const dt = new DataTransfer();
+            dt.items.add(file);
+            document.getElementById(`input_${angle}`).files = dt.files;
+        }, 'image/jpeg', 0.8);
+    }
+
+    loadModels();
+</script>
 {% endblock %}
-

@@ -5,3 +5,5 @@ numpy>=1.26
 face_recognition>=1.3
 Pillow>=10.0
 setuptools
+supabase
+python-dotenv

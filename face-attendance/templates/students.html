@@ -7,7 +7,14 @@
       <h1>Registered Students</h1>
       <p class="subtitle">Total Count: {{ students|length }}</p>
     </div>
-    <a href="{{ url_for('add_student') }}" class="btn">Add Student</a>
+    <div style="display: flex; gap: 1rem; align-items: center;">
+      <form action="{{ url_for('list_students') }}" method="GET" style="display: flex; gap: 0.5rem; align-items: center;">
+        <input type="text" name="q" placeholder="Search students..." value="{{ request.args.get('q', '') }}" 
+               style="padding: 0.6rem 1rem; border: 1px solid var(--border); border-radius: 8px; outline: none; font-family: inherit;">
+        <button type="submit" class="btn">Search</button>
+      </form>
+      <a href="{{ url_for('add_student') }}" class="btn">Add Student</a>
+    </div>
   </div>
 
   {% if students %}
@@ -26,7 +33,7 @@
           <tr>
             <td>
               <img class="thumb"
-                   src="{{ url_for('student_image', filename=s['image_path']) }}"
+                   src="{{ s['image_path'] }}"
                    alt="{{ s['name'] }}">
             </td>
             <td style="font-weight:700;">{{ s['name'].upper() }}</td>

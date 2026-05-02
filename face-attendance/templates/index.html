@@ -28,5 +28,14 @@
       <a href="{{ url_for('add_student') }}" class="btn">Add Student</a>
     </div>
   </div>
+
+  <div class="card">
+    <h2>Quick Status Check</h2>
+    <p class="subtitle" style="margin-bottom: 1.5rem;">Enter Roll Number to check if a student is present today</p>
+    <form action="{{ url_for('view_attendance') }}" method="GET" style="display: flex; gap: 0.5rem; max-width: 400px;">
+      <input type="text" name="q" placeholder="Roll Number or Name..." class="search-input" style="flex: 1;">
+      <button type="submit" class="btn">Check Status</button>
+    </form>
+  </div>
 {% endblock %}
 

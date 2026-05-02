@@ -8,9 +8,6 @@ Then open:  http://localhost:5000
 
 import os
 print(">>> INITIALIZING FACE ATTENDANCE APP...")
-import sqlite3
-import csv
-import threading
 import time
 from datetime import datetime
 
@@ -21,68 +18,35 @@ from flask import (
 from werkzeug.utils import secure_filename
 import face_recognition
 import numpy as np
+from dotenv import load_dotenv
+from supabase import create_client, Client
+
+# Load environment variables
+load_dotenv()
 
 # ---------------- Configuration ----------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-STUDENTS_DIR = os.path.join(BASE_DIR, "students")
-DB_PATH = os.path.join(BASE_DIR, "database.db")
-ATTENDANCE_CSV = os.path.join(BASE_DIR, "attendance.csv")
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg"}
 
-os.makedirs(STUDENTS_DIR, exist_ok=True)
-UNKNOWN_FACES_DIR = os.path.join(BASE_DIR, "static", "unknown_faces")
-os.makedirs(UNKNOWN_FACES_DIR, exist_ok=True)
-
+# Supabase Config
+SUPABASE_URL = os.environ.get("SUPABASE_URL")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SESSION_SECRET", "change-me-in-production")
 
 
 # ---------------- Database helpers ----------------
-def get_db():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
-
-
 def init_db():
-    """Create the students table if it doesn't exist."""
-    with get_db() as conn:
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS students (
-                id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                name        TEXT    NOT NULL,
-                roll_number TEXT    NOT NULL UNIQUE,
-                image_path  TEXT    NOT NULL,
-                encoding    BLOB,
-                created_at  TEXT    NOT NULL
-            )
-            """
-        )
-        # Migration: Check if encoding column exists
-        try:
-            conn.execute("SELECT encoding FROM students LIMIT 1")
-        except sqlite3.OperationalError:
-            conn.execute("ALTER TABLE students ADD COLUMN encoding BLOB")
-        
-        # Create unknown_detections table
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS unknown_detections (
-                id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                image_path  TEXT    NOT NULL,
-                detected_at TEXT    NOT NULL
-            )
-            """
-        )
-        conn.commit()
-
-    # Make sure the attendance CSV exists with a header row
-    if not os.path.exists(ATTENDANCE_CSV):
-        with open(ATTENDANCE_CSV, "w", newline="") as f:
-            writer = csv.writer(f)
-            writer.writerow(["Name", "Roll Number", "Date", "Time"])
+    """Ensure Supabase buckets exist."""
+    try:
+        # Check if bucket exists, if not it might throw an error or we can just try to create it
+        supabase.storage.create_bucket("face-attendance", options={"public": True})
+        print(">>> CREATED SUPABASE BUCKET: face-attendance")
+    except Exception as e:
+        # Likely already exists
+        pass
 
 
 def allowed_file(filename: str) -> bool:
@@ -93,15 +57,14 @@ def allowed_file(filename: str) -> bool:
 @app.route("/")
 def index():
     """Dashboard with quick stats."""
-    with get_db() as conn:
-        total_students = conn.execute("SELECT COUNT(*) FROM students").fetchone()[0]
+    # Get total students
+    res = supabase.table("students").select("count", count="exact").execute()
+    total_students = res.count if res.count is not None else 0
 
+    # Get today's attendance count
     today = datetime.now().strftime("%Y-%m-%d")
-    today_count = 0
-    if os.path.exists(ATTENDANCE_CSV):
-        with open(ATTENDANCE_CSV, "r", newline="") as f:
-            reader = csv.DictReader(f)
-            today_count = sum(1 for row in reader if row.get("Date") == today)
+    res_attendance = supabase.table("attendance").select("count", count="exact").eq("date", today).execute()
+    today_count = res_attendance.count if res_attendance.count is not None else 0
 
     return render_template(
         "index.html",
@@ -113,10 +76,14 @@ def index():
 
 @app.route("/students")
 def list_students():
-    with get_db() as conn:
-        students = conn.execute(
-            "SELECT * FROM students ORDER BY name COLLATE NOCASE"
-        ).fetchall()
+    q = request.args.get("q", "").strip()
+    query = supabase.table("students").select("*")
+    
+    if q:
+        query = query.or_(f"name.ilike.%{q}%,roll_number.ilike.%{q}%")
+        
+    res = query.order("name").execute()
+    students = res.data
     return render_template("students.html", students=students)
 
 
@@ -125,71 +92,77 @@ def add_student():
     if request.method == "POST":
         name = request.form.get("name", "").strip()
         roll = request.form.get("roll_number", "").strip()
-        file = request.files.get("image")
+        
+        # We now expect 3 images: front, left, right
+        files = {
+            "front": request.files.get("image_front"),
+            "left": request.files.get("image_left"),
+            "right": request.files.get("image_right")
+        }
 
         if not name or not roll:
             flash("Name and Roll Number are required.", "error")
             return redirect(url_for("add_student"))
 
-        if not file or file.filename == "":
-            flash("Please upload a face image.", "error")
-            return redirect(url_for("add_student"))
-
-        if not allowed_file(file.filename):
-            flash("Only PNG, JPG, and JPEG images are allowed.", "error")
-            return redirect(url_for("add_student"))
-
-        ext = file.filename.rsplit(".", 1)[1].lower()
-        safe_roll = secure_filename(roll)
-        filename = f"{safe_roll}.{ext}"
-        save_path = os.path.join(STUDENTS_DIR, filename)
+        all_encodings = []
+        main_image_url = ""
 
         try:
-            # 1. SAVE THE FILE FIRST
-            file.save(save_path)
-
-            # 2. RESIZE IMAGE FOR FASTER ENCODING
-            print(f">>> OPTIMIZING IMAGE FOR: {name}")
             from PIL import Image
-            with Image.open(save_path) as pil_img:
-                # Convert to RGB if necessary
-                if pil_img.mode != 'RGB':
-                    pil_img = pil_img.convert('RGB')
-                # Resize to max 800px width/height while maintaining aspect ratio
-                pil_img.thumbnail((800, 800), Image.LANCZOS)
-                pil_img.save(save_path, "JPEG", quality=85)
+            for angle, file in files.items():
+                if not file or file.filename == "":
+                    continue
+                
+                ext = file.filename.rsplit(".", 1)[1].lower()
+                temp_name = f"temp_{roll}_{angle}.{ext}"
+                local_path = os.path.join(BASE_DIR, temp_name)
+                
+                file.save(local_path)
+                
+                # Optimize
+                with Image.open(local_path) as pil_img:
+                    pil_img.thumbnail((640, 640), Image.LANCZOS)
+                    pil_img.save(local_path, "JPEG", quality=75)
+                
+                # Encode
+                img = face_recognition.load_image_file(local_path)
+                face_encs = face_recognition.face_encodings(img, num_jitters=0)
+                if face_encs:
+                    all_encodings.append(face_encs[0].tolist())
+                
+                # Upload to Supabase (Only the front image is used for the UI thumbnail)
+                with open(local_path, "rb") as f:
+                    supabase.storage.from_("face-attendance").upload(
+                        path=f"students/{roll}_{angle}.jpg",
+                        file=f,
+                        file_options={"cache-control": "3600", "upsert": "true"}
+                    )
+                
+                if angle == "front":
+                    main_image_url = supabase.storage.from_("face-attendance").get_public_url(f"students/{roll}_front.jpg")
+                
+                if os.path.exists(local_path): os.remove(local_path)
 
-            # 3. CALCULATE ENCODING
-            print(f">>> ENCODING FACE...")
-            img = face_recognition.load_image_file(save_path)
-            # Use 'hog' model for speed (default), but ensure it scans the whole image
-            face_encs = face_recognition.face_encodings(img, num_jitters=1)
-            encoding_blob = face_encs[0].tobytes() if face_encs else None
-            print(f">>> ENCODING COMPLETE. FOUND: {len(face_encs)} FACE(S)")
+            if not all_encodings:
+                flash("No faces detected in the uploaded images.", "error")
+                return redirect(url_for("add_student"))
 
-            # 3. SAVE TO DATABASE
-            with get_db() as conn:
-                conn.execute(
-                    """
-                    INSERT INTO students (name, roll_number, image_path, encoding, created_at)
-                    VALUES (?, ?, ?, ?, ?)
-                    """,
-                    (name, roll, filename, encoding_blob, datetime.now().isoformat(timespec="seconds")),
-                )
-                conn.commit()
-            
-            # 4. UPDATE LIVE SYSTEM
+            # Save to Database (encoding is now a list of 1-3 vectors)
+            student_data = {
+                "name": name,
+                "roll_number": roll,
+                "image_path": main_image_url,
+                "encoding": all_encodings, 
+                "created_at": datetime.now().isoformat()
+            }
+            supabase.table("students").insert(student_data).execute()
+
             reload_encodings()
-            flash(f"Student '{name}' registered successfully.", "success")
+            flash(f"Face ID Enrollment complete for '{name}'.", "success")
             return redirect(url_for("list_students"))
 
-        except sqlite3.IntegrityError:
-            if os.path.exists(save_path): os.remove(save_path) # Cleanup
-            flash(f"A student with roll number '{roll}' already exists.", "error")
-            return redirect(url_for("add_student"))
         except Exception as e:
-            if os.path.exists(save_path): os.remove(save_path) # Cleanup
-            flash(f"Error saving student: {str(e)}", "error")
+            flash(f"Enrollment Error: {str(e)}", "error")
             return redirect(url_for("add_student"))
 
     return render_template("add_student.html")
@@ -197,24 +170,23 @@ def add_student():
 
 @app.route("/students/delete/<int:student_id>", methods=["POST"])
 def delete_student(student_id: int):
-    with get_db() as conn:
-        student = conn.execute(
-            "SELECT * FROM students WHERE id = ?", (student_id,)
-        ).fetchone()
-        if student is None:
-            flash("Student not found.", "error")
-            return redirect(url_for("list_students"))
+    # Fetch student to get image path
+    res = supabase.table("students").select("*").eq("id", student_id).execute()
+    if not res.data:
+        flash("Student not found.", "error")
+        return redirect(url_for("list_students"))
+    
+    student = res.data[0]
+    filename = student["image_path"].split("/")[-1]
 
-        # Delete image file if it exists
-        image_path = os.path.join(STUDENTS_DIR, student["image_path"])
-        if os.path.exists(image_path):
-            try:
-                os.remove(image_path)
-            except OSError:
-                pass
+    # Delete from Storage
+    try:
+        supabase.storage.from_("face-attendance").remove([f"students/{filename}"])
+    except:
+        pass
 
-        conn.execute("DELETE FROM students WHERE id = ?", (student_id,))
-        conn.commit()
+    # Delete from Database
+    supabase.table("students").delete().eq("id", student_id).execute()
 
     flash(f"Student '{student['name']}' deleted.", "success")
     return redirect(url_for("list_students"))
@@ -222,53 +194,70 @@ def delete_student(student_id: int):
 
 @app.route("/attendance")
 def view_attendance():
-    rows = []
-    if os.path.exists(ATTENDANCE_CSV):
-        with open(ATTENDANCE_CSV, "r", newline="") as f:
-            reader = csv.DictReader(f)
-            rows = list(reader)
-    # Show newest first
-    rows.reverse()
+    q = request.args.get("q", "").strip()
+    query = supabase.table("attendance").select("*")
+    
+    if q:
+        # Filter by name OR roll_number using or condition in Supabase
+        query = query.or_(f"name.ilike.%{q}%,roll_number.ilike.%{q}%")
+        
+    res = query.order("date", desc=True).order("time", desc=True).execute()
+    rows = res.data
     return render_template("attendance.html", rows=rows)
-
-
-@app.route("/students/image/<path:filename>")
-def student_image(filename: str):
-    return send_from_directory(STUDENTS_DIR, filename)
 
 
 @app.route("/admin")
 def admin_dashboard():
-    with get_db() as conn:
-        total_unknowns = conn.execute("SELECT COUNT(*) FROM unknown_detections").fetchone()[0]
-        recent_unknowns = conn.execute("SELECT * FROM unknown_detections ORDER BY detected_at DESC LIMIT 5").fetchall()
+    # Total unknowns
+    res_count = supabase.table("unknown_detections").select("count", count="exact").execute()
+    total_unknowns = res_count.count if res_count.count is not None else 0
+    
+    # Recent unknowns
+    res_recent = supabase.table("unknown_detections").select("*").order("detected_at", desc=True).limit(5).execute()
+    recent_unknowns = res_recent.data
+    
     return render_template("admin_dashboard.html", total_unknowns=total_unknowns, recent_unknowns=recent_unknowns)
 
 
 @app.route("/admin/unknowns")
 def list_unknowns():
-    with get_db() as conn:
-        unknowns = conn.execute("SELECT * FROM unknown_detections ORDER BY detected_at DESC").fetchall()
+    res = supabase.table("unknown_detections").select("*").order("detected_at", desc=True).execute()
+    unknowns = res.data
     return render_template("unknown_detections.html", unknowns=unknowns)
 
 
 @app.route("/admin/unknowns/delete/<int:detection_id>", methods=["POST"])
 def delete_unknown(detection_id: int):
-    with get_db() as conn:
-        detection = conn.execute("SELECT * FROM unknown_detections WHERE id = ?", (detection_id,)).fetchone()
-        if detection:
-            img_path = os.path.join(UNKNOWN_FACES_DIR, detection["image_path"])
-            if os.path.exists(img_path):
-                os.remove(img_path)
-            conn.execute("DELETE FROM unknown_detections WHERE id = ?", (detection_id,))
-            conn.commit()
-            flash("Unknown detection record deleted.", "success")
+    # Fetch detection to get image path
+    res = supabase.table("unknown_detections").select("*").eq("id", detection_id).execute()
+    if res.data:
+        detection = res.data[0]
+        filename = detection["image_path"].split("/")[-1]
+        
+        # Delete from Storage
+        try:
+            supabase.storage.from_("face-attendance").remove([f"unknowns/{filename}"])
+        except:
+            pass
+            
+        # Delete from DB
+        supabase.table("unknown_detections").delete().eq("id", detection_id).execute()
+        flash("Unknown detection record deleted.", "success")
+    
     return redirect(url_for("list_unknowns"))
 
 
+@app.route("/students/image/<path:filename>")
+def student_image(filename: str):
+    # Redirect to Supabase Public URL
+    url = supabase.storage.from_("face-attendance").get_public_url(f"students/{filename}")
+    return redirect(url)
+
 @app.route("/unknown/image/<path:filename>")
 def unknown_image(filename: str):
-    return send_from_directory(UNKNOWN_FACES_DIR, filename)
+    # Redirect to Supabase Public URL
+    url = supabase.storage.from_("face-attendance").get_public_url(f"unknowns/{filename}")
+    return redirect(url)
 
 
 # ---------------- Camera test (browser-based) ----------------
@@ -281,14 +270,21 @@ def reload_encodings():
     global known_encodings, known_labels
     encs = []
     labs = []
-    with get_db() as conn:
-        students = conn.execute("SELECT name, roll_number, encoding FROM students WHERE encoding IS NOT NULL").fetchall()
+    res = supabase.table("students").select("name, roll_number, encoding").execute()
+    students = res.data
     
     for s in students:
-        # Load from BLOB instead of processing image file (MUCH FASTER)
-        vec = np.frombuffer(s["encoding"], dtype=np.float64)
-        encs.append(vec)
-        labs.append(f"{s['name']}|{s['roll_number']}")
+        raw_encoding = s.get("encoding")
+        if raw_encoding:
+            # Check if it's a list of multiple encodings (Face ID style)
+            if isinstance(raw_encoding[0], list):
+                for sub_enc in raw_encoding:
+                    encs.append(np.array(sub_enc, dtype=np.float64))
+                    labs.append(f"{s['name']}|{s['roll_number']}")
+            else:
+                # Fallback for old single-encoding records
+                encs.append(np.array(raw_encoding, dtype=np.float64))
+                labs.append(f"{s['name']}|{s['roll_number']}")
         
     known_encodings = encs
     known_labels = labs
@@ -347,9 +343,13 @@ def generate_frames():
                         name, roll = known_labels[best_idx].split("|")
                         today = datetime.now().strftime("%Y-%m-%d")
                         if f"{roll}|{today}" not in marked_today:
-                            with open(ATTENDANCE_CSV, "a", newline="") as f:
-                                writer = csv.writer(f)
-                                writer.writerow([name, roll, today, datetime.now().strftime("%H:%M:%S")])
+                            # Mark attendance in Supabase
+                            supabase.table("attendance").insert({
+                                "name": name,
+                                "roll_number": roll,
+                                "date": today,
+                                "time": datetime.now().strftime("%H:%M:%S")
+                            }).execute()
                             marked_today.add(f"{roll}|{today}")
                     else:
                         any_unknown_in_frame = True
@@ -367,29 +367,43 @@ def generate_frames():
                 if current_time - last_unknown_capture > 5:
                     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                     img_name = f"unknown_{timestamp}.jpg"
-                    img_path = os.path.join(UNKNOWN_FACES_DIR, img_name)
+                    local_temp_path = os.path.join(BASE_DIR, img_name)
                     
                     # Save a copy of the frame with RED markers for the admin log
-                    # This helps security see exactly who was detected as unknown
                     record_frame = frame.copy()
                     for face in last_face_data:
                         t, r, b, l = face["box"]
-                        # Draw red box for records
                         cv2.rectangle(record_frame, (l, t), (r, b), (0, 0, 255), 2)
                         cv2.putText(record_frame, face["label"], (l, t-10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
                     
-                    cv2.imwrite(img_path, record_frame)
+                    cv2.imwrite(local_temp_path, record_frame)
                     
-                    # Log to DB
-                    with get_db() as conn:
-                        conn.execute(
-                            "INSERT INTO unknown_detections (image_path, detected_at) VALUES (?, ?)",
-                            (img_name, datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-                        )
-                        conn.commit()
+                    # USE A THREAD FOR UPLOAD: Don't block the camera feed!
+                    def upload_unknown_task(path, name):
+                        try:
+                            with open(path, "rb") as f:
+                                supabase.storage.from_("face-attendance").upload(
+                                    path=f"unknowns/{name}",
+                                    file=f,
+                                    file_options={"cache-control": "3600", "upsert": "true"}
+                                )
+                            
+                            # Get Public URL and Log to DB
+                            image_url = supabase.storage.from_("face-attendance").get_public_url(f"unknowns/{name}")
+                            supabase.table("unknown_detections").insert({
+                                "image_path": image_url,
+                                "detected_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                            }).execute()
+                            
+                            if os.path.exists(path): os.remove(path)
+                        except Exception as e:
+                            print(f">>> ERROR UPLOADING SECURITY SNAPSHOT: {e}")
+
+                    import threading
+                    threading.Thread(target=upload_unknown_task, args=(local_temp_path, img_name)).start()
                     
                     last_unknown_capture = current_time
-                    print(f">>> SECURITY ALERT: Unknown person detected at {timestamp}")
+                    print(f">>> SECURITY SNAPSHOT TRIGGERED: {timestamp}")
 
         # Draw all persistent face detections on EVERY frame
         for face in last_face_data:
@@ -425,25 +439,22 @@ def camera():
 
 @app.route("/api/students")
 def api_students():
-    """JSON list of students with image URLs (used by the camera test page)."""
-    with get_db() as conn:
-        rows = conn.execute(
-            "SELECT id, name, roll_number, image_path FROM students"
-        ).fetchall()
+    """JSON list of students with image URLs."""
+    res = supabase.table("students").select("id, name, roll_number, image_path").execute()
     return jsonify([
         {
             "id": r["id"],
             "name": r["name"],
             "roll_number": r["roll_number"],
-            "image_url": url_for("student_image", filename=r["image_path"]),
+            "image_url": r["image_path"],
         }
-        for r in rows
+        for r in res.data
     ])
 
 
 @app.route("/api/mark-attendance", methods=["POST"])
 def api_mark_attendance():
-    """Append a row to attendance.csv (one entry per student per day)."""
+    """Append a row to Supabase attendance table."""
     data = request.get_json(silent=True) or {}
     name = (data.get("name") or "").strip()
     roll = (data.get("roll_number") or "").strip()
@@ -453,16 +464,17 @@ def api_mark_attendance():
     today = datetime.now().strftime("%Y-%m-%d")
 
     # Avoid duplicate entries for the same student on the same day
-    if os.path.exists(ATTENDANCE_CSV):
-        with open(ATTENDANCE_CSV, "r", newline="") as f:
-            for row in csv.DictReader(f):
-                if row.get("Roll Number") == roll and row.get("Date") == today:
-                    return jsonify({"ok": True, "duplicate": True})
+    res_dup = supabase.table("attendance").select("id").eq("roll_number", roll).eq("date", today).execute()
+    if res_dup.data:
+        return jsonify({"ok": True, "duplicate": True})
 
     now = datetime.now()
-    with open(ATTENDANCE_CSV, "a", newline="") as f:
-        writer = csv.writer(f)
-        writer.writerow([name, roll, today, now.strftime("%H:%M:%S")])
+    supabase.table("attendance").insert({
+        "name": name,
+        "roll_number": roll,
+        "date": today,
+        "time": now.strftime("%H:%M:%S")
+    }).execute()
 
     return jsonify({"ok": True, "duplicate": False, "time": now.strftime("%H:%M:%S")})
 
@@ -470,6 +482,7 @@ def api_mark_attendance():
 # ---------------- Entry point ----------------
 if __name__ == "__main__":
     init_db()
+    reload_encodings()
     port = int(os.environ.get("PORT", 3000))
     # Use Waitress (production-grade, multi-threaded WSGI server) so concurrent
     # requests (e.g. parallel model downloads + /api calls) don't block each
