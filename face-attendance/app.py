@@ -8,7 +8,6 @@ from supabase import create_client, Client
 from dotenv import load_dotenv
 from datetime import datetime
 import time
-import threading
 
 # Load Environment Variables
 load_dotenv()
@@ -90,7 +89,7 @@ def add_student():
                             main_image_url = supabase.storage.from_("face-attendance").get_public_url(f"students/{filename}")
 
             if not all_encodings:
-                flash("No faces detected. Ensure your face is in the oval.", "error")
+                flash("No faces detected. Position your face in the oval.", "error")
                 return redirect(url_for("add_student"))
 
             supabase.table("students").insert({
@@ -100,10 +99,10 @@ def add_student():
             }).execute()
 
             reload_encodings()
-            flash(f"Success! {name} is now enrolled.", "success")
+            flash(f"Enrolled {name} successfully.", "success")
             return redirect(url_for("list_students"))
         except Exception as e:
-            flash(f"Error: {str(e)}", "error")
+            flash(f"Failed: {str(e)}", "error")
             return redirect(url_for("add_student"))
     return render_template("add_student.html")
 
@@ -111,7 +110,7 @@ def add_student():
 def delete_student(student_id: int):
     supabase.table("students").delete().eq("id", student_id).execute()
     reload_encodings()
-    flash("Student record removed.", "success")
+    flash("Student removed.", "success")
     return redirect(url_for("list_students"))
 
 @app.route("/attendance")
@@ -138,16 +137,30 @@ def list_unknowns():
 @app.route("/admin/unknowns/delete/<int:detection_id>", methods=["POST"])
 def delete_unknown(detection_id: int):
     supabase.table("unknown_detections").delete().eq("id", detection_id).execute()
-    flash("Alert record deleted.", "success")
+    flash("Log deleted.", "success")
     return redirect(url_for("list_unknowns"))
 
-@app.route("/students/image/<path:filename>")
-@app.route("/unknown/image/<path:filename>")
-def serve_image(filename: str):
-    # This ensures old links still work by redirecting to Supabase
-    bucket = "students" if "roll" in filename or "_" in filename else "unknowns"
-    url = supabase.storage.from_("face-attendance").get_public_url(f"{bucket}/{filename}")
-    return redirect(url)
+@app.route("/api/students")
+def api_students():
+    res = supabase.table("students").select("id, name, roll_number, image_path").execute()
+    data = []
+    for r in res.data:
+        url = r["image_path"] if r["image_path"].startswith("http") else \
+              supabase.storage.from_("face-attendance").get_public_url(f"students/{r['image_path']}")
+        data.append({"id": r["id"], "name": r["name"], "roll_number": r["roll_number"], "image_url": url})
+    return jsonify(data)
+
+@app.route("/api/mark-attendance", methods=["POST"])
+def api_mark_attendance():
+    data = request.get_json(silent=True) or {}
+    name, roll = data.get("name"), data.get("roll_number")
+    if name and roll:
+        supabase.table("attendance").insert({
+            "name": name, "roll_number": roll, "date": datetime.now().strftime("%Y-%m-%d"),
+            "time": datetime.now().strftime("%H:%M:%S")
+        }).execute()
+        return jsonify({"ok": True})
+    return jsonify({"ok": False}), 400
 
 @app.route("/api/config-camera", methods=["POST"])
 def config_camera():
@@ -179,14 +192,10 @@ def generate_frames():
                     distances = face_recognition.face_distance(known_face_encodings, face_enc)
                     best_match_idx = np.argmin(distances)
                     if distances[best_match_idx] <= 0.5:
-                        label_data = known_face_names[best_match_idx].split("|")
-                        name, roll = label_data[0], label_data[1]
+                        name, roll = known_face_names[best_match_idx].split("|")
                         today = datetime.now().strftime("%Y-%m-%d")
                         if f"{roll}|{today}" not in marked_today:
-                            supabase.table("attendance").insert({
-                                "name": name, "roll_number": roll, "date": today,
-                                "time": datetime.now().strftime("%H:%M:%S")
-                            }).execute()
+                            supabase.table("attendance").insert({"name": name, "roll_number": roll, "date": today, "time": datetime.now().strftime("%H:%M:%S")}).execute()
                             marked_today.add(f"{roll}|{today}")
                 last_face_data.append({"box": (top, right, bottom, left), "label": name.upper()})
         for face in last_face_data:
@@ -208,5 +217,4 @@ def camera():
 if __name__ == "__main__":
     reload_encodings()
     port = int(os.environ.get("PORT", 3000))
-    print(f">>> PRODUCTION SERVER READY ON PORT {port}")
     serve(app, host="0.0.0.0", port=port)
