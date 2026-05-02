@@ -11,6 +11,7 @@ print(">>> INITIALIZING FACE ATTENDANCE APP...")
 import sqlite3
 import csv
 import threading
+import time
 from datetime import datetime
 
 from flask import (
@@ -29,6 +30,9 @@ ATTENDANCE_CSV = os.path.join(BASE_DIR, "attendance.csv")
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg"}
 
 os.makedirs(STUDENTS_DIR, exist_ok=True)
+UNKNOWN_FACES_DIR = os.path.join(BASE_DIR, "static", "unknown_faces")
+os.makedirs(UNKNOWN_FACES_DIR, exist_ok=True)
+
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SESSION_SECRET", "change-me-in-production")
@@ -61,6 +65,17 @@ def init_db():
             conn.execute("SELECT encoding FROM students LIMIT 1")
         except sqlite3.OperationalError:
             conn.execute("ALTER TABLE students ADD COLUMN encoding BLOB")
+        
+        # Create unknown_detections table
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS unknown_detections (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                image_path  TEXT    NOT NULL,
+                detected_at TEXT    NOT NULL
+            )
+            """
+        )
         conn.commit()
 
     # Make sure the attendance CSV exists with a header row
@@ -222,6 +237,40 @@ def student_image(filename: str):
     return send_from_directory(STUDENTS_DIR, filename)
 
 
+@app.route("/admin")
+def admin_dashboard():
+    with get_db() as conn:
+        total_unknowns = conn.execute("SELECT COUNT(*) FROM unknown_detections").fetchone()[0]
+        recent_unknowns = conn.execute("SELECT * FROM unknown_detections ORDER BY detected_at DESC LIMIT 5").fetchall()
+    return render_template("admin_dashboard.html", total_unknowns=total_unknowns, recent_unknowns=recent_unknowns)
+
+
+@app.route("/admin/unknowns")
+def list_unknowns():
+    with get_db() as conn:
+        unknowns = conn.execute("SELECT * FROM unknown_detections ORDER BY detected_at DESC").fetchall()
+    return render_template("unknown_detections.html", unknowns=unknowns)
+
+
+@app.route("/admin/unknowns/delete/<int:detection_id>", methods=["POST"])
+def delete_unknown(detection_id: int):
+    with get_db() as conn:
+        detection = conn.execute("SELECT * FROM unknown_detections WHERE id = ?", (detection_id,)).fetchone()
+        if detection:
+            img_path = os.path.join(UNKNOWN_FACES_DIR, detection["image_path"])
+            if os.path.exists(img_path):
+                os.remove(img_path)
+            conn.execute("DELETE FROM unknown_detections WHERE id = ?", (detection_id,))
+            conn.commit()
+            flash("Unknown detection record deleted.", "success")
+    return redirect(url_for("list_unknowns"))
+
+
+@app.route("/unknown/image/<path:filename>")
+def unknown_image(filename: str):
+    return send_from_directory(UNKNOWN_FACES_DIR, filename)
+
+
 # ---------------- Camera test (browser-based) ----------------
 # ---------------- CCTV / Backend Streaming ----------------
 camera_source = "0"  # Default to webcam
@@ -263,6 +312,7 @@ def generate_frames():
     cap = cv2.VideoCapture(camera_source)
     marked_today = set() 
     frame_count = 0
+    last_unknown_capture = 0 # Cooldown for unknown face captures
     
     last_face_data = []
     
@@ -275,15 +325,18 @@ def generate_frames():
         # Perform face recognition every 3rd frame (faster than 5th, but still saves CPU)
         if frame_count % 3 == 0:
             last_face_data = []
-            # Use 0.5 scale for detection (balance between speed and accuracy)
-            small_frame = cv2.resize(frame, (0, 0), fx=0.5, fy=0.5)
+            # Use higher resolution for better CCTV-style detection of distant faces
+            # 0.75 is a good balance between speed and accuracy for multiple people
+            scale = 0.75
+            small_frame = cv2.resize(frame, (0, 0), fx=scale, fy=scale)
             rgb_small = cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB)
             
             # Find all face locations and encodings in the current frame
-            # 'hog' is faster on CPU, 'cnn' is for GPU (Railway is CPU only)
-            face_locs = face_recognition.face_locations(rgb_small, model="hog")
+            # number_of_times_to_upsample=1 helps find smaller faces in the background
+            face_locs = face_recognition.face_locations(rgb_small, number_of_times_to_upsample=1, model="hog")
             face_encs = face_recognition.face_encodings(rgb_small, face_locs)
             
+            any_unknown_in_frame = False
             for (top, right, bottom, left), face_enc in zip(face_locs, face_encs):
                 name, roll = "Unknown", ""
                 if known_encodings:
@@ -298,12 +351,45 @@ def generate_frames():
                                 writer = csv.writer(f)
                                 writer.writerow([name, roll, today, datetime.now().strftime("%H:%M:%S")])
                             marked_today.add(f"{roll}|{today}")
+                    else:
+                        any_unknown_in_frame = True
 
-                # Store detection data (scaled back up by 2x)
+                # Store detection data (scaled back up correctly for CCTV resolution)
                 last_face_data.append({
-                    "box": (top * 2, right * 2, bottom * 2, left * 2),
+                    "box": (int(top / scale), int(right / scale), int(bottom / scale), int(left / scale)),
                     "label": name.upper()
                 })
+            
+            # CCTV ALERT: Capture Unknown Faces if any unknown was detected in the entire frame
+            if any_unknown_in_frame:
+                current_time = time.time()
+                # Capture at most once every 5 seconds for CCTV-style monitoring
+                if current_time - last_unknown_capture > 5:
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    img_name = f"unknown_{timestamp}.jpg"
+                    img_path = os.path.join(UNKNOWN_FACES_DIR, img_name)
+                    
+                    # Save a copy of the frame with RED markers for the admin log
+                    # This helps security see exactly who was detected as unknown
+                    record_frame = frame.copy()
+                    for face in last_face_data:
+                        t, r, b, l = face["box"]
+                        # Draw red box for records
+                        cv2.rectangle(record_frame, (l, t), (r, b), (0, 0, 255), 2)
+                        cv2.putText(record_frame, face["label"], (l, t-10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+                    
+                    cv2.imwrite(img_path, record_frame)
+                    
+                    # Log to DB
+                    with get_db() as conn:
+                        conn.execute(
+                            "INSERT INTO unknown_detections (image_path, detected_at) VALUES (?, ?)",
+                            (img_name, datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+                        )
+                        conn.commit()
+                    
+                    last_unknown_capture = current_time
+                    print(f">>> SECURITY ALERT: Unknown person detected at {timestamp}")
 
         # Draw all persistent face detections on EVERY frame
         for face in last_face_data:

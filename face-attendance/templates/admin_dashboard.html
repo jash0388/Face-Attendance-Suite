@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Panel - Face Attendance{% endblock %}
+
+{% block content %}
+<h1>Admin Control Panel</h1>
+<p class="subtitle">System overview and unknown detection logs</p>
+
+<div class="stats">
+  <div class="stat">
+    <div class="label">Unknown Detections</div>
+    <div class="value">{{ total_unknowns }}</div>
+  </div>
+  <div class="stat">
+    <div class="label">Quick Actions</div>
+    <div style="margin-top: 0.5rem;">
+      <a href="{{ url_for('list_unknowns') }}" class="btn">View All Detections</a>
+    </div>
+  </div>
+</div>
+
+<h2>Recent Unknown Detections</h2>
+<div class="card">
+  {% if recent_unknowns %}
+    <table>
+      <thead>
+        <tr>
+          <th>Snapshot</th>
+          <th>Time Detected</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for u in recent_unknowns %}
+        <tr>
+          <td>
+            <img src="{{ url_for('unknown_image', filename=u.image_path) }}" class="thumb" style="width: 80px; height: 80px;">
+          </td>
+          <td>{{ u.detected_at }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <div style="text-align: right;">
+      <a href="{{ url_for('list_unknowns') }}" style="font-size: 0.8rem; text-decoration: underline;">View all detections &rarr;</a>
+    </div>
+  {% else %}
+    <p style="color: var(--text-secondary); font-size: 0.85rem;">No unknown faces detected yet.</p>
+  {% endif %}
+</div>
+
+<h2>Security Settings</h2>
+<div class="card">
+  <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1rem;">
+    The system automatically captures a photo when an unknown face is detected. 
+    You can review these snapshots to identify unauthorized access or register new students.
+  </p>
+</div>
+{% endblock %}
