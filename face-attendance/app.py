@@ -3,6 +3,7 @@ import cv2
 import numpy as np
 import face_recognition
 from flask import Flask, render_template, Response, request, redirect, url_for, flash, jsonify
+from waitress import serve
 from supabase import create_client, Client
 from dotenv import load_dotenv
 from datetime import datetime
@@ -188,4 +189,5 @@ def video_feed():
 # (Main boilerplates remain same...)
 if __name__ == "__main__":
     reload_encodings()
-    app.run(host="0.0.0.0", port=3000, debug=False)
+    print(">>> STARTING PRODUCTION SERVER ON PORT 3000...")
+    serve(app, host="0.0.0.0", port=3000)

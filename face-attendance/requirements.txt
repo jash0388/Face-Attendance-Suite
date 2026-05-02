@@ -7,3 +7,4 @@ Pillow>=10.0
 setuptools
 supabase
 python-dotenv
+waitress
