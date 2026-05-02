@@ -189,5 +189,7 @@ def video_feed():
 # (Main boilerplates remain same...)
 if __name__ == "__main__":
     reload_encodings()
-    print(">>> STARTING PRODUCTION SERVER ON PORT 3000...")
-    serve(app, host="0.0.0.0", port=3000)
+    # Railway provides the PORT environment variable automatically
+    port = int(os.environ.get("PORT", 3000))
+    print(f">>> STARTING PRODUCTION SERVER ON PORT {port}...")
+    serve(app, host="0.0.0.0", port=port)
