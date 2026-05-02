@@ -7,7 +7,7 @@
 
 <div class="container" style="max-width: 600px;">
     <h1>Face ID Enrollment</h1>
-    <p class="subtitle">AI will automatically detect you. Place your face in the oval.</p>
+    <p class="subtitle">System will automatically detect you. Place your face in the oval.</p>
 
     <div class="card" style="text-align: center; padding: 2.5rem; position: relative; overflow: hidden;">
         <!-- Scanning Effect -->
@@ -31,7 +31,7 @@
         </div>
 
         <div id="instruction-box" style="margin-bottom: 2rem;">
-            <div id="status-msg" style="font-weight: 700; font-size: 1.25rem; color: var(--text); margin-bottom: 0.5rem;">Loading AI Models...</div>
+            <div id="status-msg" style="font-weight: 700; font-size: 1.25rem; color: var(--text); margin-bottom: 0.5rem;">Initializing...</div>
             <div id="sub-msg" style="font-size: 0.9rem; color: var(--text-secondary);">Please wait a moment</div>
         </div>
 
@@ -85,7 +85,7 @@
             ]);
             
             modelsLoaded = true;
-            statusMsg.innerText = "AI Online";
+            statusMsg.innerText = "System Online";
             statusMsg.style.color = "var(--success)";
             setTimeout(() => {
                 statusMsg.innerText = "Position Your Face";
@@ -93,7 +93,7 @@
             }, 1000);
         } catch (err) {
             console.error("Model Load Error:", err);
-            statusMsg.innerText = "AI Loading Failed";
+            statusMsg.innerText = "System Failed to Start";
             subMsg.innerText = "Check your internet or refresh the page";
             statusMsg.style.color = "var(--danger)";
         }
@@ -103,8 +103,7 @@
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 640 } });
             video.srcObject = stream;
-            statusMsg.innerText = "Position Your Face";
-            subMsg.innerText = "Align your head inside the oval to start";
+            statusMsg.innerText = "Initializing Camera...";
             detectFace();
         } catch (err) {
             statusMsg.innerText = "Camera Access Denied";
@@ -115,12 +114,12 @@
     async function detectFace() {
         if (sequenceStarted || isEnrolled) return;
 
-        const detections = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions());
+        const detections = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 160, scoreThreshold: 0.4 }));
         
         if (detections) {
             const box = detections.box;
-            // Basic check: is the face roughly centered and large enough?
-            if (box.width > 150 && box.x > 100 && box.x < 350) {
+            // Loosened constraints for faster lock
+            if (box.width > 120) {
                 ovalGlow.style.borderColor = "var(--success)";
                 oval.style.borderColor = "var(--success)";
                 
