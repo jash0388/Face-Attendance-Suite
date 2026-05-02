@@ -59,12 +59,15 @@ def index():
     try:
         today = datetime.now().strftime("%Y-%m-%d")
         students = supabase.table("students").select("id", count="exact").execute()
-        attendance = supabase.table("attendance").select("id", count="exact").eq("date", today).execute()
+        
+        # Count unique students for today
+        attendance_res = supabase.table("attendance").select("roll_number").eq("date", today).execute()
+        unique_rolls = set(row['roll_number'] for row in attendance_res.data)
         
         return render_template("index.html", 
                                today=today, 
                                total_students=students.count or 0, 
-                               today_count=attendance.count or 0)
+                               today_count=len(unique_rolls))
     except Exception as e:
         print(f"Index Error: {e}")
         return render_template("index.html", today=datetime.now().strftime("%Y-%m-%d"), total_students=0, today_count=0)
