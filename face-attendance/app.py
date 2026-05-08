@@ -208,7 +208,7 @@ def generate_frames():
                     if known_face_encodings:
                         distances = face_recognition.face_distance(known_face_encodings, face_enc)
                         best_idx = np.argmin(distances)
-                        if distances[best_idx] <= 0.48: # Ultra-Security Tolerance
+                        if distances[best_idx] <= 0.52: # Balanced Security (Strict but reliable)
                             name, roll = known_face_names[best_idx].split("|")
                             today = datetime.now().strftime("%Y-%m-%d")
                             if f"{roll}|{today}" not in marked_today:
