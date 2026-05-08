@@ -139,6 +139,24 @@ def add_student():
             return redirect(url_for("list_students"))
     return render_template("add_student.html")
 
+@app.route("/students/delete/<student_id>", methods=["POST"])
+def delete_student(student_id):
+    try:
+        # Get image path first to delete from storage
+        res = supabase.table("students").select("image_path").eq("id", student_id).execute()
+        if res.data:
+            path = res.data[0]["image_path"]
+            if path and "students/" in path:
+                fname = path.split("students/")[1].split("?")[0]
+                supabase.storage.from_("face-attendance").remove([f"students/{fname}"])
+        
+        supabase.table("students").delete().eq("id", student_id).execute()
+        reload_encodings()
+        flash("Student removed.", "success")
+    except Exception as e:
+        flash(f"Error: {e}", "error")
+    return redirect(url_for("list_students"))
+
 @app.route("/attendance")
 def view_attendance():
     res = supabase.table("attendance").select("*").order("date", desc=True).order("time", desc=True).execute()
@@ -232,12 +250,19 @@ def camera(): return render_template("camera.html")
 
 @app.route("/api/students")
 def api_students():
-    res = supabase.table("students").select("id, name, roll_number, image_path").execute()
-    data = []
-    for r in res.data:
-        url = r["image_path"] if r["image_path"].startswith("http") else supabase.storage.from_("face-attendance").get_public_url(f"students/{r['image_path']}")
-        data.append({"id": r["id"], "name": r["name"], "roll_number": r["roll_number"], "image_url": url})
-    return jsonify(data)
+    try:
+        res = supabase.table("students").select("id, name, roll_number, image_path").execute()
+        data = []
+        for r in res.data:
+            path = r.get("image_path")
+            if not path: continue
+            
+            url = path if path.startswith("http") else supabase.storage.from_("face-attendance").get_public_url(f"students/{path}")
+            data.append({"id": r["id"], "name": r["name"], "roll_number": r["roll_number"], "image_url": url})
+        return jsonify(data)
+    except Exception as e:
+        print(f"API Students Error: {e}")
+        return jsonify([]), 500
 
 @app.route("/api/mark-attendance", methods=["POST"])
 def api_mark_attendance():

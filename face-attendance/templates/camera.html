@@ -100,16 +100,31 @@
             if (students.length > 0) {
                 const labeled = [];
                 for (const s of students) {
-                    const img = await faceapi.fetchImage(s.image_url);
-                    const fullDesc = await faceapi.detectSingleFace(img).withFaceLandmarks().withFaceDescriptor();
-                    if (fullDesc) labeled.push(new faceapi.LabeledFaceDescriptors(`${s.name}|${s.roll_number}`, [fullDesc.descriptor]));
+                    try {
+                        const img = await faceapi.fetchImage(s.image_url);
+                        const fullDesc = await faceapi.detectSingleFace(img).withFaceLandmarks().withFaceDescriptor();
+                        if (fullDesc) {
+                            labeled.push(new faceapi.LabeledFaceDescriptors(`${s.name}|${s.roll_number}`, [fullDesc.descriptor]));
+                        } else {
+                            console.warn(`No face detected in photo for ${s.name}`);
+                        }
+                    } catch (err) {
+                        console.error(`Failed to load image for ${s.name}:`, err);
+                        // If we see a "TEXT/PLAIN" error, it's likely a Supabase permission issue
+                        if (err.message.includes('TEXT/PLAIN') || err.message.includes('blob')) {
+                            setStatus('IMAGE ERROR: Ensure Supabase bucket is PUBLIC');
+                        }
+                    }
                 }
                 if (labeled.length > 0) {
                     matcher = new faceapi.FaceMatcher(labeled, MATCH_THRESHOLD);
+                    setStatus('System Ready');
+                } else {
+                    setStatus('Ready (No Face Data)');
                 }
+            } else {
+                setStatus('System Ready (No Students)');
             }
-
-            setStatus('System Ready');
             startBtn.disabled = false;
         } catch (e) {
             setStatus('ERROR: ' + e.message);
