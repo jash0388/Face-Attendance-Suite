@@ -122,8 +122,15 @@ def add_student():
             file = request.files.get(f"image_{angle}")
             if file:
                 img = cv2.imdecode(np.frombuffer(file.read(), np.uint8), cv2.IMREAD_COLOR)
+                
+                # OPTIMIZATION: Resize image if it's too large to dramatically speed up face detection
+                h, w = img.shape[:2]
+                if w > 600:
+                    scale = 600 / w
+                    img = cv2.resize(img, (0, 0), fx=scale, fy=scale)
+
                 rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-                locs = face_recognition.face_locations(rgb)
+                locs = face_recognition.face_locations(rgb, model="hog")
                 if locs:
                     all_encs.append(face_recognition.face_encodings(rgb, locs)[0].tolist())
                     if angle == "front":
@@ -208,7 +215,7 @@ def generate_frames():
                     if known_face_encodings:
                         distances = face_recognition.face_distance(known_face_encodings, face_enc)
                         best_idx = np.argmin(distances)
-                        if distances[best_idx] <= 0.52: # Balanced Security (Strict but reliable)
+                        if distances[best_idx] <= 0.45: # Stricter security threshold to prevent false matches
                             name, roll = known_face_names[best_idx].split("|")
                             today = datetime.now().strftime("%Y-%m-%d")
                             if f"{roll}|{today}" not in marked_today:
