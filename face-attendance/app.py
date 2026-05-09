@@ -248,8 +248,32 @@ def video_feed():
 @app.route("/camera")
 def camera(): return render_template("camera.html")
 
-@app.route("/api/students")
+@app.route("/api/students", methods=["GET", "POST"])
 def api_students():
+    if request.method == "POST":
+        try:
+            data = request.get_json(silent=True) or {}
+            name = data.get("name") or data.get("fullName")
+            roll = data.get("roll_number") or data.get("rollNumber")
+            
+            if not name or not roll:
+                return jsonify({"error": "Name and Roll Number are required"}), 400
+                
+            # Insert the basic student info from the Vercel app's registration form
+            supabase.table("students").insert({
+                "name": name,
+                "roll_number": roll,
+                "image_path": "",
+                "encoding": []
+            }).execute()
+            
+            reload_encodings()
+            return jsonify({"ok": True, "message": "Student created successfully"})
+        except Exception as e:
+            print(f"API Create Student Error: {e}")
+            return jsonify({"error": str(e)}), 500
+
+    # GET logic
     try:
         res = supabase.table("students").select("id, name, roll_number, image_path").execute()
         data = []
